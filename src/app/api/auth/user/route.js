@@ -1,30 +1,72 @@
 // src/app/api/auth/user/route.js
 import { NextResponse } from 'next/server';
-import { getServerUser } from '@/lib/auth-utils';
 import { connectToDatabase } from '@/lib/mongodb';
+import { headers } from 'next/headers';
 import mongoose from 'mongoose';
 
 export async function GET(request) {
   try {
-    // Get the currently authenticated user
-    const user = await getServerUser();
+    // Get user ID from query params
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get('userId');
     
-    if (!user) {
+    // Get authorization header (optional)
+    const headersList = headers();
+    const authHeader = headersList.get('authorization');
+    const sessionToken = authHeader ? authHeader.replace('Bearer ', '') : null;
+    
+    if (!userId && !sessionToken) {
       return NextResponse.json(
-        { success: false, message: 'Not authenticated' },
-        { status: 401 }
+        { success: false, message: 'No user identifier provided' },
+        { status: 400 }
       );
     }
     
-    // Return sanitized user object with latest data
+    // Connect to database
+    await connectToDatabase();
+    
+    // Define user schema
+    const UserSchema = new mongoose.Schema({
+      name: String,
+      email: String,
+      password: String,
+      sessionToken: String,
+      accountType: String,
+      subscriptionStatus: String,
+    }, { strict: false });
+    
+    // Get user model
+    const User = mongoose.models.User || mongoose.model('User', UserSchema);
+    
+    // Find the user
+    let user;
+    
+    if (sessionToken) {
+      // Try finding by session token first (more secure)
+      user = await User.findOne({ sessionToken });
+    }
+    
+    if (!user && userId) {
+      // Fallback to finding by ID
+      user = await User.findById(userId);
+    }
+    
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: 'User not found' },
+        { status: 404 }
+      );
+    }
+    
+    // Return sanitized user object (no password or sensitive data)
     return NextResponse.json({
       success: true,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        accountType: user.accountType,
-        subscriptionStatus: user.subscriptionStatus,
+        accountType: user.accountType || 'regular',
+        subscriptionStatus: user.subscriptionStatus || 'none',
         createdAt: user.createdAt,
       }
     });

@@ -1,23 +1,24 @@
 // src/lib/auth-utils.js
-import { cookies } from 'next/headers';
 import { connectToDatabase } from '@/lib/mongodb';
 import mongoose from 'mongoose';
 
-// Helper function to get the currently authenticated user on the server
-export async function getServerUser() {
+export async function getServerUser(request) {
   try {
-    // The cookies() function itself needs to be awaited, not the get method
-    const cookieStore = await cookies();
-    const sessionToken = cookieStore.get('session_token')?.value;
+    // Extract session token from request headers if provided
+    let sessionToken = null;
     
+    // If request is provided, try to get the cookie from it
+    if (request && request.cookies) {
+      sessionToken = request.cookies.get('session_token')?.value;
+    }
+    
+    // If no session token found, return null
     if (!sessionToken) {
       return null;
     }
     
-    // Connect to the database
     await connectToDatabase();
     
-    // Find user with matching session token
     const User = mongoose.models.User || mongoose.model('User', new mongoose.Schema({
       name: String,
       email: String,

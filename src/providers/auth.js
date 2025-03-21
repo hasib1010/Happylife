@@ -1,9 +1,7 @@
-// src/providers/auth.js
 'use client';
 
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { v4 as uuidv4 } from 'uuid';
+import { useRouter, usePathname } from 'next/navigation';
 
 // Create the authentication context
 const AuthContext = createContext();
@@ -11,198 +9,366 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [initialized, setInitialized] = useState(false);
+  const [error, setError] = useState(null);
   const router = useRouter();
+  const pathname = usePathname();
 
-  // Load user from localStorage on initial render
-  // and verify session with the server
+  // Define roles for client-side use
+  const ROLES = {
+    REGULAR: 'regular',
+    PROVIDER: 'provider',
+    PRODUCT_SELLER: 'product_seller',
+    MANAGER: 'manager',
+    ADMIN: 'admin',
+    SUPER_ADMIN: 'super_admin'
+  };
+
+  // Helper to check if user has a specific role
+  const hasRole = (requiredRoles) => {
+    if (!user) return false;
+    
+    // Convert single role to array for easier checking
+    const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
+    
+    return roles.includes(user.role);
+  };
+  
+  // Helper to check if user has permission
+  const hasPermission = (area, level) => {
+    if (!user || !user.permissions) return false;
+    
+    const permission = user.permissions[area];
+    if (!permission) return false;
+    
+    // Define permission hierarchy
+    const levels = {
+      'read_only': 1,
+      'manage_own': 2,
+      'manage_all': 3,
+      'full_access': 4
+    };
+    
+    return levels[permission] >= levels[level];
+  };
+
+  // Check if user is authenticated on initial render
   useEffect(() => {
-    const loadAndVerifyUser = async () => {
+    const checkAuthStatus = async () => {
       try {
-        // First check if we have a stored user
-        const storedUser = localStorage.getItem('user');
-        const loginTime = localStorage.getItem('loginTime');
-        
-        if (storedUser) {
-          // Check if the login session has expired (24 hours)
-          const currentTime = Date.now();
-          const sessionAge = currentTime - Number(loginTime || 0);
-          const sessionLifetime = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-          
-          if (!loginTime || sessionAge > sessionLifetime) {
-            // Session expired, clear storage
-            console.log('Session expired, logging out');
-            localStorage.removeItem('user');
-            localStorage.removeItem('loginTime');
-            setUser(null);
+        setLoading(true);
+        const response = await fetch('/api/auth/me', {
+          credentials: 'include' // Important: Include cookies in the request
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.user) {
+            setUser(data.user);
           } else {
-            // We have a potentially valid session - verify with server
-            const parsedUser = JSON.parse(storedUser);
-            setUser(parsedUser); // Set user initially from localStorage
-            
-            try {
-              // Verify session with the server
-              const response = await fetch('/api/auth/verify-session', {
-                method: 'GET',
-                headers: { 'Content-Type': 'application/json' },
-              });
-              
-              if (response.ok) {
-                const data = await response.json();
-                if (data.success && data.user) {
-                  // Update user with fresh data from server
-                  setUser({
-                    ...parsedUser,
-                    ...data.user // Merge with fresh data from server
-                  });
-                  localStorage.setItem('user', JSON.stringify({
-                    ...parsedUser,
-                    ...data.user
-                  }));
-                  // Refresh the login time
-                  localStorage.setItem('loginTime', Date.now().toString());
-                } else {
-                  // Session invalid on server, clear local storage
-                  localStorage.removeItem('user');
-                  localStorage.removeItem('loginTime');
-                  setUser(null);
-                }
-              } else {
-                // Unable to verify with server, but keep local session for now
-                console.warn('Unable to verify session with server');
-              }
-            } catch (verifyError) {
-              // Error verifying with server, but keep local session
-              console.error('Error verifying session:', verifyError);
-            }
+            setUser(null);
           }
+        } else {
+          // If 401 or other error, user is not authenticated
+          setUser(null);
         }
       } catch (error) {
-        console.error('Error loading user from storage:', error);
+        console.error('Error checking auth status:', error);
+        setUser(null);
       } finally {
         setLoading(false);
-        setInitialized(true);
       }
     };
 
-    loadAndVerifyUser();
+    checkAuthStatus();
+    
+    // Set up interval to refresh access token
+    const refreshInterval = setInterval(async () => {
+      if (user) {
+        try {
+          const response = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            credentials: 'include'
+          });
+          
+          if (!response.ok) {
+            // If refresh fails, log out the user
+            setUser(null);
+            router.push('/auth/login');
+          }
+        } catch (error) {
+          console.error('Error refreshing token:', error);
+          // If refresh fails, log out the user
+          setUser(null);
+          router.push('/auth/login');
+        }
+      }
+    }, 45 * 60 * 1000); // Refresh every 45 minutes
+    
+    return () => clearInterval(refreshInterval);
   }, []);
 
-  // Sign in function
-  const signIn = async (email, password) => {
-    setLoading(true);
-    
+  // Login function
+  const login = async (email, password) => {
     try {
-      const response = await fetch('/api/auth/verify-credentials', {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ email, password }),
+        credentials: 'include'
       });
-
+      
       const data = await response.json();
-
+      
       if (!response.ok) {
-        throw new Error(data.message || 'Invalid credentials');
+        throw new Error(data.message || 'Login failed');
       }
-
+      
       if (data.success && data.user) {
-        // Generate a session token
-        const sessionToken = uuidv4();
+        setUser(data.user);
         
-        // Store the session token on the server
-        const sessionResponse = await fetch('/api/auth/create-session', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: data.user.id, sessionToken }),
-        });
+        // Determine redirect based on user role
+        let redirectPath = '/dashboard';
         
-        if (!sessionResponse.ok) {
-          throw new Error('Failed to create session');
+        if (['admin', 'super_admin', 'manager'].includes(data.user.role)) {
+          redirectPath = '/admin/dashboard';
+        } else if (data.user.role === 'provider') {
+          redirectPath = '/dashboard/provider';
+        } else if (data.user.role === 'product_seller') {
+          redirectPath = '/dashboard/products';
         }
         
-        // Store user in state and localStorage
-        setUser(data.user);
-        localStorage.setItem('user', JSON.stringify(data.user));
-        localStorage.setItem('loginTime', Date.now().toString());
-        setLoading(false);
-        return { success: true };
+        // Check for callbackUrl in query params
+        const urlParams = new URLSearchParams(window.location.search);
+        const callbackUrl = urlParams.get('callbackUrl');
+        
+        return {
+          success: true,
+          redirectPath: callbackUrl || redirectPath
+        };
       } else {
+        setUser(null);
         throw new Error('Invalid response from server');
       }
     } catch (error) {
+      setError(error.message);
+      return {
+        success: false,
+        message: error.message
+      };
+    } finally {
       setLoading(false);
-      return { success: false, error: error.message };
     }
   };
 
-  // Sign out function
-  const signOut = async () => {
+  // Logout function
+  const logout = async () => {
     try {
-      // Clear session on the server
-      await fetch('/api/auth/end-session', {
+      setLoading(true);
+      
+      await fetch('/api/auth/logout', {
         method: 'POST',
+        credentials: 'include'
       });
       
-      // Clear user from state and localStorage
       setUser(null);
-      localStorage.removeItem('user');
-      localStorage.removeItem('loginTime');
+      router.push('/auth/login');
       
-      // Redirect to home page
-      router.push('/');
+      return { success: true };
     } catch (error) {
-      console.error('Error signing out:', error);
-      // Still clear local state even if server request fails
-      setUser(null);
-      localStorage.removeItem('user');
-      localStorage.removeItem('loginTime');
-      router.push('/');
+      console.error('Error logging out:', error);
+      return {
+        success: false,
+        message: error.message
+      };
+    } finally {
+      setLoading(false);
     }
   };
 
   // Register function
-  const register = async (name, email, password) => {
-    setLoading(true);
-    
+  const register = async (userData) => {
     try {
+      setLoading(true);
+      setError(null);
+      
       const response = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(userData)
       });
-
+      
       const data = await response.json();
-
+      
       if (!response.ok) {
         throw new Error(data.message || 'Registration failed');
       }
-
-      setLoading(false);
-      return { success: true };
+      
+      return {
+        success: true,
+        user: data.user
+      };
     } catch (error) {
+      setError(error.message);
+      return {
+        success: false,
+        message: error.message
+      };
+    } finally {
       setLoading(false);
-      return { success: false, error: error.message };
     }
   };
 
-  // Function to refresh user data (useful after subscription changes)
-  const refreshUserData = async () => {
-    if (!user) return;
-    
+  // Request password reset
+  const requestPasswordReset = async (email) => {
     try {
-      const response = await fetch('/api/auth/user');
+      setLoading(true);
+      setError(null);
       
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.user) {
-          // Update user with fresh data
-          const updatedUser = { ...user, ...data.user };
-          setUser(updatedUser);
-          localStorage.setItem('user', JSON.stringify(updatedUser));
-        }
+      const response = await fetch('/api/auth/reset-password-request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to request password reset');
       }
+      
+      return { success: true };
     } catch (error) {
-      console.error('Error refreshing user data:', error);
+      setError(error.message);
+      return {
+        success: false,
+        message: error.message
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reset password
+  const resetPassword = async (token, newPassword) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ token, newPassword })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to reset password');
+      }
+      
+      return { success: true };
+    } catch (error) {
+      setError(error.message);
+      return {
+        success: false,
+        message: error.message
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Update user profile
+  const updateProfile = async (profileData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (!user) {
+        throw new Error('Not authenticated');
+      }
+      
+      const response = await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(profileData),
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update profile');
+      }
+      
+      // Update user state with new data
+      setUser({
+        ...user,
+        ...data.user
+      });
+      
+      return {
+        success: true,
+        user: data.user
+      };
+    } catch (error) {
+      setError(error.message);
+      return {
+        success: false,
+        message: error.message
+      };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Change password
+  const changePassword = async (currentPassword, newPassword) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      if (!user) {
+        throw new Error('Not authenticated');
+      }
+      
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to change password');
+      }
+      
+      return { success: true };
+    } catch (error) {
+      setError(error.message);
+      return {
+        success: false,
+        message: error.message
+      };
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -210,14 +376,18 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     loading,
-    initialized,
+    error,
     isAuthenticated: !!user,
-    isSubscribed: user?.subscriptionStatus === 'active',
-    accountType: user?.accountType || 'regular',
-    signIn,
-    signOut,
+    hasRole,
+    hasPermission,
+    ROLES,
+    login,
+    logout,
     register,
-    refreshUserData
+    requestPasswordReset,
+    resetPassword,
+    updateProfile,
+    changePassword
   };
 
   return (
@@ -230,10 +400,10 @@ export function AuthProvider({ children }) {
 // Custom hook to use the auth context
 export function useAuth() {
   const context = useContext(AuthContext);
-  
+
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
-  
+
   return context;
 }

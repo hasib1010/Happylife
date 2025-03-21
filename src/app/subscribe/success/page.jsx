@@ -1,141 +1,121 @@
-// src/app/subscribe/success/page.js
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { CheckCircle2, Clock, ArrowRight, Loader2 } from 'lucide-react';
+import { CheckCircle, Loader2 } from 'lucide-react';
+import { useAuth } from '@/providers/auth';
+import { ROLES } from '@/lib/constants';
 
 export default function SubscriptionSuccessPage() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [session, setSession] = useState(null);
-  
-  const sessionId = searchParams.get('session_id');
+  const searchParams = useSearchParams();
+  const { user, loading, isAuthenticated, refreshUserData } = useAuth();
+  const [isProcessing, setIsProcessing] = useState(true);
 
+  // Get the account type from URL parameters
+  const accountType = searchParams.get('type') || ROLES.PROVIDER;
+
+  // Redirect if not authenticated
   useEffect(() => {
-    // Verify the payment session with our API
-    const verifyPayment = async () => {
-      if (!sessionId) {
-        router.push('/subscribe');
-        return;
-      }
+    if (!loading && !isAuthenticated) {
+      router.push('/auth/login');
+      return;
+    }
 
+    // Simulate updating user account type
+    const updateUserSubscription = async () => {
+      setIsProcessing(true);
       try {
-        const response = await fetch(`/api/subscriptions/verify?session_id=${sessionId}`);
-        const data = await response.json();
+        // In a real application, this would be handled by the payment webhook
+        // For this demo, we'll simulate updating the user's account type
+        console.log('Updating user subscription status for:', accountType);
         
-        if (response.ok) {
-          setSession(data.session);
-        } else {
-          // If verification fails, redirect back to subscription page
-          router.push('/subscribe');
-        }
+        // Simulate API delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        // Refresh user data to get updated subscription status
+        await refreshUserData();
+        
+        setIsProcessing(false);
       } catch (error) {
-        console.error('Error verifying payment:', error);
-      } finally {
-        setIsLoading(false);
+        console.error('Error updating subscription:', error);
+        setIsProcessing(false);
       }
     };
 
-    verifyPayment();
-  }, [sessionId, router]);
+    updateUserSubscription();
+  }, [loading, isAuthenticated, router, accountType, refreshUserData]);
 
-  if (isLoading) {
+  if (loading || isProcessing) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="flex flex-col items-center justify-center min-h-screen px-4 sm:px-6 lg:px-8">
         <Loader2 className="h-12 w-12 text-emerald-600 animate-spin mb-4" />
-        <h2 className="text-lg font-medium text-gray-900">Verifying your subscription</h2>
-        <p className="mt-2 text-sm text-gray-500">Please wait while we confirm your payment...</p>
+        <h1 className="text-xl font-medium text-gray-900">Activating your subscription...</h1>
+        <p className="mt-2 text-base text-gray-600">
+          Please wait while we set up your account.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white min-h-screen">
-      <div className="mx-auto max-w-3xl px-6 py-16 lg:px-8">
-        <div className="mx-auto max-w-2xl rounded-3xl border border-emerald-100 bg-emerald-50 px-6 py-10 text-center sm:px-10">
-          <CheckCircle2 className="mx-auto h-16 w-16 text-emerald-600" />
-          <h1 className="mt-6 text-3xl font-bold tracking-tight text-gray-900">Subscription Successful!</h1>
-          <p className="mt-4 text-lg text-gray-600">
-            Thank you for subscribing to HappyLife.Services. Your account has been activated.
-          </p>
-          
-          <div className="mt-8 text-left bg-white rounded-lg border border-emerald-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900">Subscription Details</h2>
-            <div className="mt-4 space-y-3">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Plan:</span>
-                <span className="text-sm font-medium text-gray-900">Premium Membership</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Amount:</span>
-                <span className="text-sm font-medium text-gray-900">$20.00/month</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Status:</span>
-                <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
-                  Active
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-500">Next billing date:</span>
-                <div className="flex items-center text-sm font-medium text-gray-900">
-                  <Clock className="mr-1 h-4 w-4 text-gray-400" /> 
-                  {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="mt-10 flex flex-col space-y-4">
-            <Link
-              href="/dashboard"
-              className="rounded-md bg-emerald-600 px-5 py-3 text-center text-base font-semibold text-white hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
-            >
-              Go to Dashboard
-            </Link>
-            <Link
-              href="/dashboard/profile"
-              className="flex items-center justify-center text-base font-semibold text-emerald-600 hover:text-emerald-500"
-            >
-              Complete Your Profile <ArrowRight className="ml-1 h-4 w-4" />
-            </Link>
-          </div>
+    <div className="bg-white min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-md text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 mb-4">
+          <CheckCircle className="h-8 w-8 text-green-600" />
+        </div>
+        <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+          Subscription Activated!
+        </h1>
+        <p className="mt-4 text-lg text-gray-600">
+          Thank you for subscribing to HappyLife.Services. Your 
+          {accountType === ROLES.PROVIDER ? ' Service Provider' : ' Product Seller'} 
+          account is now active.
+        </p>
+        <div className="mt-8 bg-emerald-50 border border-emerald-100 rounded-lg p-4 text-left">
+          <h2 className="text-lg font-medium text-gray-900">What's next?</h2>
+          <ul className="mt-2 space-y-2 text-sm text-gray-600">
+            <li className="flex items-start">
+              <span className="font-medium mr-2">1.</span>
+              <span>
+                Complete your profile with all your details and expertise
+              </span>
+            </li>
+            <li className="flex items-start">
+              <span className="font-medium mr-2">2.</span>
+              <span>
+                {accountType === ROLES.PROVIDER 
+                  ? 'Create your service listings with pricing and availability'
+                  : 'Add your products with detailed descriptions and images'}
+              </span>
+            </li>
+            <li className="flex items-start">
+              <span className="font-medium mr-2">3.</span>
+              <span>
+                Write informative blog posts to showcase your expertise
+              </span>
+            </li>
+            <li className="flex items-start">
+              <span className="font-medium mr-2">4.</span>
+              <span>
+                Connect with clients and grow your wellness business
+              </span>
+            </li>
+          </ul>
         </div>
         
-        <div className="mt-16 text-center">
-          <h2 className="text-xl font-semibold text-gray-900">What's Next?</h2>
-          <div className="mt-8 grid grid-cols-1 gap-8 sm:grid-cols-3">
-            <div className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-900/5">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                1
-              </span>
-              <h3 className="mt-4 text-base font-semibold text-gray-900">Complete Your Profile</h3>
-              <p className="mt-2 text-sm text-gray-500">
-                Add your details, expertise, services, and upload photos to showcase your offerings.
-              </p>
-            </div>
-            <div className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-900/5">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                2
-              </span>
-              <h3 className="mt-4 text-base font-semibold text-gray-900">Create Your First Listing</h3>
-              <p className="mt-2 text-sm text-gray-500">
-                Add your products or services with detailed descriptions to attract potential clients.
-              </p>
-            </div>
-            <div className="rounded-lg bg-white p-6 shadow-sm ring-1 ring-gray-900/5">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                3
-              </span>
-              <h3 className="mt-4 text-base font-semibold text-gray-900">Publish Your First Blog</h3>
-              <p className="mt-2 text-sm text-gray-500">
-                Share your expertise and knowledge to establish yourself as an authority in your field.
-              </p>
-            </div>
-          </div>
+        <div className="mt-8">
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+          >
+            Go to Dashboard
+          </Link>
+          
+          <p className="mt-4 text-sm text-gray-500">
+            You can manage your subscription at any time from your dashboard settings.
+          </p>
         </div>
       </div>
     </div>

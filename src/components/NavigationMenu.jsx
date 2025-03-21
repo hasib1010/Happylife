@@ -7,7 +7,7 @@ import { Menu, X, Search, ChevronDown, User, LogOut } from 'lucide-react';
 import { useAuth } from '@/providers/auth';
 
 export default function NavigationMenu() {
-  const { user, isAuthenticated, signOut } = useAuth();
+  const { user, isAuthenticated, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   
@@ -105,7 +105,7 @@ export default function NavigationMenu() {
                     </Link>
                     <button
                       onClick={() => {
-                        signOut();
+                        logout();
                         setIsUserMenuOpen(false);
                       }}
                       className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -217,7 +217,7 @@ export default function NavigationMenu() {
                   </Link>
                   <button
                     onClick={() => {
-                      signOut();
+                      logout();
                       setIsMenuOpen(false);
                     }}
                     className="block w-full text-left px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-emerald-600 hover:bg-gray-50"

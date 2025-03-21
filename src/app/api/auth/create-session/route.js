@@ -2,7 +2,6 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { connectToDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
 import mongoose from 'mongoose';
 
 export async function POST(request) {
@@ -38,10 +37,8 @@ export async function POST(request) {
       }
     );
     
-    // Set cookie
-    cookies().set({
-      name: 'session_token',
-      value: sessionToken,
+    // Set cookie using the chained approach
+    cookies().set('session_token', sessionToken, {
       httpOnly: true,
       path: '/',
       secure: process.env.NODE_ENV === 'production',
@@ -49,7 +46,19 @@ export async function POST(request) {
       sameSite: 'lax',
     });
     
-    return NextResponse.json({ success: true });
+    // Also set a non-httpOnly cookie for client-side verification
+    cookies().set('auth_verified', 'true', {
+      httpOnly: false,
+      path: '/',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 24, // 1 day in seconds
+      sameSite: 'lax',
+    });
+    
+    return NextResponse.json({ 
+      success: true,
+      message: 'Session created successfully' 
+    });
   } catch (error) {
     console.error('Error creating session:', error);
     return NextResponse.json(

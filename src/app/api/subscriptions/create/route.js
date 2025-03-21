@@ -1,98 +1,126 @@
 // src/app/api/subscriptions/create/route.js
 import { NextResponse } from 'next/server';
-import { connectToDatabase } from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
-import Stripe from 'stripe';
-import mongoose from 'mongoose';
-// Import the fixed getServerUser function
-import { getServerUser } from '@/lib/auth-utils';
+import { cookies } from 'next/headers';
+import jwt from 'jsonwebtoken';
+import { connectDB } from '@/lib/mongoose';
+import User from '@/models/User';
+import stripe, { 
+  createOrRetrieveCustomer,
+  createCheckoutSession,
+  getSubscriptionForCustomer
+} from '@/lib/stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Environment variables
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret_key';
 const SUBSCRIPTION_PRICE_ID = process.env.STRIPE_SUBSCRIPTION_PRICE_ID;
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 
 export async function POST(request) {
   try {
-    // Use the fixed getServerUser function instead of the custom one
-    const user = await getServerUser();
-
-    if (!user) {
+    await connectDB();
+    
+    // Get access token from cookie
+    const cookieStore = cookies();
+    const token = cookieStore.get('access_token')?.value;
+    
+    if (!token) {
       return NextResponse.json(
-        { message: 'Unauthorized' },
+        { success: false, message: 'Authentication required' },
         { status: 401 }
       );
     }
-
-    const { accountType } = await request.json();
-
-    if (!accountType || (accountType !== 'provider' && accountType !== 'product_seller')) {
+    
+    // Verify token
+    let userId;
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      userId = decoded.id;
+    } catch (error) {
       return NextResponse.json(
-        { message: 'Invalid account type' },
+        { success: false, message: 'Invalid authentication token' },
+        { status: 401 }
+      );
+    }
+    
+    // Get request data
+    const data = await request.json();
+    const { accountType, userIdFromClient } = data;
+    
+    // Validate input
+    if (!accountType) {
+      return NextResponse.json(
+        { success: false, message: 'Account type is required' },
         { status: 400 }
       );
     }
-
+    
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: 'User not found' },
+        { status: 404 }
+      );
+    }
+    
     // Check if user already has an active subscription
     if (user.subscriptionStatus === 'active') {
-      return NextResponse.json(
-        { message: 'User already has an active subscription' },
-        { status: 400 }
-      );
-    }
-
-    // Create or retrieve Stripe customer
-    let stripeCustomerId = user.stripeCustomerId;
-    
-    if (!stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        name: user.name,
-        metadata: {
-          userId: user._id.toString(),
-        },
+      // Return URL to the billing portal instead
+      return NextResponse.json({
+        success: true,
+        message: 'User already has an active subscription',
+        data: {
+          hasExistingSubscription: true,
+          redirectToDashboard: true
+        }
       });
-      
-      stripeCustomerId = customer.id;
-      
-      // Save Stripe customer ID to user
-      user.stripeCustomerId = stripeCustomerId;
+    }
+    
+    // Get or create Stripe customer
+    const customer = await createOrRetrieveCustomer({
+      email: user.email,
+      name: user.name,
+      metadata: {
+        userId: user._id.toString()
+      }
+    });
+    
+    // Store Stripe customer ID if not already stored
+    if (!user.stripeCustomerId) {
+      user.stripeCustomerId = customer.id;
       await user.save();
     }
-
-    // Create checkout session for subscription with auto-renewal
-    const checkoutSession = await stripe.checkout.sessions.create({
-      customer: stripeCustomerId,
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price: SUBSCRIPTION_PRICE_ID, // $20/month price ID from Stripe
-          quantity: 1,
-        },
-      ],
-      mode: 'subscription',
-      subscription_data: {
-        // Auto-renewal is the default for subscriptions
-        metadata: {
-          userId: user._id.toString(),
-          accountType,
-        },
-         
-      },
-      // Store payment method for future recurring payments
-      payment_method_collection: 'always',
-      success_url: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/subscribe/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/subscribe/cancel`,
+    
+    // Create checkout session
+    const checkoutSession = await createCheckoutSession({
+      customerId: customer.id,
+      priceId: SUBSCRIPTION_PRICE_ID,
+      successUrl: `${BASE_URL}/subscribe/success?type=${accountType}&session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${BASE_URL}/subscribe/checkout?canceled=true`,
+      metadata: {
+        userId: user._id.toString(),
+        accountType
+      }
     });
-
+    
+    if (!checkoutSession.success) {
+      return NextResponse.json(
+        { success: false, message: checkoutSession.error || 'Failed to create checkout session' },
+        { status: 500 }
+      );
+    }
+    
     return NextResponse.json({
       success: true,
       data: {
         checkoutUrl: checkoutSession.url,
-      },
+        sessionId: checkoutSession.sessionId
+      }
     });
   } catch (error) {
-    console.error('Error creating subscription:', error);
+    console.error('Subscription creation error:', error);
     return NextResponse.json(
-      { message: 'Internal server error' },
+      { success: false, message: error.message || 'Internal server error' },
       { status: 500 }
     );
   }

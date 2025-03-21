@@ -1,16 +1,15 @@
-// src/app/dashboard/page.jsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  PenLine, 
-  ShoppingBag, 
-  FileText, 
-  Calendar, 
-  User, 
-  Settings, 
+import {
+  PenLine,
+  ShoppingBag,
+  FileText,
+  Calendar,
+  User,
+  Settings,
   Loader2,
   ArrowRight,
   CreditCard,
@@ -21,7 +20,7 @@ import { useAuth } from '@/providers/auth';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, loading, isAuthenticated, isSubscribed, accountType, signOut } = useAuth();
+  const { user, loading, isAuthenticated, logout, hasRole, ROLES } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState({
     providers: [],
@@ -32,14 +31,18 @@ export default function DashboardPage() {
   const [subscriptionInfo, setSubscriptionInfo] = useState(null);
   const [subscriptionLoading, setSubscriptionLoading] = useState(false);
 
+  // Determine if user has an active subscription
+  const isSubscribed = user?.subscriptionStatus === 'active';
+  const accountType = user?.role || user?.accountType || 'regular';
+
   // Redirect if not authenticated
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      router.push('/auth/signin?callbackUrl=/dashboard');
+      router.push('/auth/login?callbackUrl=/dashboard');
     } else if (!loading && isAuthenticated) {
       // User is authenticated, fetch dashboard data
       fetchDashboardData();
-      
+
       // If subscribed, also fetch subscription details
       if (isSubscribed) {
         fetchSubscriptionDetails();
@@ -50,10 +53,12 @@ export default function DashboardPage() {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      // This is a placeholder. In a real application, you would fetch actual data
-      // from your API endpoints based on the user type
+      // For MVP, we'll use mock data
+      // In a production app, you would fetch real data from your API
       
-      // For now, set mock data
+      // Simulating API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       setDashboardData({
         providers: [],
         products: [],
@@ -70,38 +75,36 @@ export default function DashboardPage() {
   const fetchSubscriptionDetails = async () => {
     setSubscriptionLoading(true);
     try {
-      const response = await fetch('/api/subscriptions/status');
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include'
+      });
       
-      // Handle 401 Unauthorized errors gracefully (occurs due to cookie issue)
-      if (response.status === 401) {
-        console.log('Unable to fetch subscription data: unauthorized');
-        // We'll use the subscription status from useAuth() instead
-        setSubscriptionInfo({
-          hasSubscription: isSubscribed,
-          subscription: {
-            status: 'active',
-            plan: accountType,
-            autoRenew: true,
-          }
-        });
-        return;
+      if (!response.ok) {
+        throw new Error('Failed to fetch user details');
       }
       
       const data = await response.json();
-
-      if (response.ok) {
-        setSubscriptionInfo(data.data);
-      } else {
-        console.error('Failed to fetch subscription data:', data.message);
+      
+      if (data.success && data.user) {
+        setSubscriptionInfo({
+          hasSubscription: data.user.subscriptionStatus === 'active',
+          subscription: {
+            status: data.user.subscriptionStatus || 'none',
+            plan: data.user.role || data.user.accountType,
+            autoRenew: true,
+            currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // Mock date 30 days from now
+            daysUntilRenewal: 30 // Mock value
+          }
+        });
       }
     } catch (error) {
       console.error('Error fetching subscription details:', error);
-      // Fallback to basic subscription info from auth context
+      // Fallback to basic subscription info
       setSubscriptionInfo({
         hasSubscription: isSubscribed,
         subscription: {
-          status: 'active',
-          plan: accountType,
+          status: user?.subscriptionStatus || 'none',
+          plan: accountType
         }
       });
     } finally {
@@ -192,21 +195,21 @@ export default function DashboardPage() {
             Welcome, {user?.name || 'User'}
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            Manage your {accountType === 'provider' ? 'provider services' : 'product listings'} and content
+            Manage your {hasRole(ROLES.PROVIDER) ? 'provider services' : 'product listings'} and content
           </p>
         </div>
         <div className="mt-4 flex md:ml-4 md:mt-0">
           <button
-            onClick={signOut}
+            onClick={() => logout()}
             className="inline-flex items-center rounded-md bg-gray-100 px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-200 mr-2"
           >
             Sign Out
           </button>
           <Link
-            href={accountType === 'provider' ? "/dashboard/provider/new" : "/dashboard/products/new"}
+            href={hasRole(ROLES.PROVIDER) ? "/dashboard/provider/new" : "/dashboard/products/new"}
             className="ml-3 inline-flex items-center rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
           >
-            {accountType === 'provider' ? (
+            {hasRole(ROLES.PROVIDER) ? (
               <>
                 <PenLine className="-ml-0.5 mr-1.5 h-5 w-5" />
                 Add Service
@@ -236,7 +239,7 @@ export default function DashboardPage() {
               Manage Subscription <ArrowRight className="ml-1 h-4 w-4" />
             </Link>
           </div>
-          
+
           <div className="px-4 py-4">
             {subscriptionLoading ? (
               <div className="flex justify-center py-4">
@@ -249,17 +252,17 @@ export default function DashboardPage() {
                   <div>
                     <h3 className="text-sm font-medium text-gray-700">Plan</h3>
                     <p className="text-sm text-gray-900 mt-1">
-                      {subscriptionInfo?.subscription?.plan === 'provider' ? 'Service Provider' : 'Product Seller'} ($20.00/month)
+                      {subscriptionInfo?.subscription?.plan === ROLES.PROVIDER ? 'Service Provider' : 'Product Seller'} ($20.00/month)
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-start">
                   <Calendar className="h-5 w-5 text-emerald-600 mt-0.5 mr-2" />
                   <div>
                     <h3 className="text-sm font-medium text-gray-700">Next Renewal</h3>
                     <p className="text-sm text-gray-900 mt-1">
-                      {subscriptionInfo?.subscription?.currentPeriodEnd ? 
+                      {subscriptionInfo?.subscription?.currentPeriodEnd ?
                         new Date(subscriptionInfo.subscription.currentPeriodEnd).toLocaleDateString() : 'N/A'}
                       {subscriptionInfo?.subscription?.daysUntilRenewal && (
                         <span className="ml-1 text-gray-500">
@@ -269,23 +272,22 @@ export default function DashboardPage() {
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-start">
                   <Clock className="h-5 w-5 text-emerald-600 mt-0.5 mr-2" />
                   <div>
                     <h3 className="text-sm font-medium text-gray-700">Status</h3>
                     <p className="text-sm mt-1">
-                      <span 
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          subscriptionInfo?.subscription?.status === 'active' ? 'bg-green-100 text-green-800' : 
-                          subscriptionInfo?.subscription?.status === 'past_due' ? 'bg-yellow-100 text-yellow-800' : 
-                          'bg-gray-100 text-gray-800'
-                        }`}
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${subscriptionInfo?.subscription?.status === 'active' ? 'bg-green-100 text-green-800' :
+                            subscriptionInfo?.subscription?.status === 'past_due' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-gray-100 text-gray-800'
+                          }`}
                       >
-                        {subscriptionInfo?.subscription?.status === 'active' ? 'Active' : 
-                         subscriptionInfo?.subscription?.status === 'past_due' ? 'Payment Past Due' : 
-                         subscriptionInfo?.subscription?.status === 'canceled' ? 'Canceled' : 
-                         subscriptionInfo?.subscription?.status || 'Unknown'}
+                        {subscriptionInfo?.subscription?.status === 'active' ? 'Active' :
+                          subscriptionInfo?.subscription?.status === 'past_due' ? 'Payment Past Due' :
+                            subscriptionInfo?.subscription?.status === 'canceled' ? 'Canceled' :
+                              subscriptionInfo?.subscription?.status || 'Unknown'}
                       </span>
                       {!subscriptionInfo?.subscription?.autoRenew && (
                         <span className="ml-2 text-xs text-gray-500">
@@ -298,7 +300,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          
+
           {/* Warning alert for past due or canceled status */}
           {subscriptionInfo?.subscription?.status === 'past_due' && (
             <div className="mx-4 mb-4 bg-yellow-50 border-l-4 border-yellow-400 p-4">
@@ -314,7 +316,7 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-          
+
           {subscriptionInfo?.subscription?.status === 'canceled' && (
             <div className="mx-4 mb-4 bg-red-50 border-l-4 border-red-400 p-4">
               <div className="flex">
@@ -323,8 +325,8 @@ export default function DashboardPage() {
                 </div>
                 <div className="ml-3">
                   <p className="text-sm text-red-700">
-                    Your subscription has been canceled and will end on {subscriptionInfo?.subscription?.currentPeriodEnd 
-                      ? new Date(subscriptionInfo.subscription.currentPeriodEnd).toLocaleDateString() 
+                    Your subscription has been canceled and will end on {subscriptionInfo?.subscription?.currentPeriodEnd
+                      ? new Date(subscriptionInfo.subscription.currentPeriodEnd).toLocaleDateString()
                       : 'the end of your billing period'}.
                   </p>
                 </div>
@@ -339,7 +341,7 @@ export default function DashboardPage() {
           <div className="p-5">
             <div className="flex items-center">
               <div className="flex-shrink-0 bg-emerald-100 rounded-md p-3">
-                {accountType === 'provider' ? (
+                {hasRole(ROLES.PROVIDER) ? (
                   <PenLine className="h-6 w-6 text-emerald-600" />
                 ) : (
                   <ShoppingBag className="h-6 w-6 text-emerald-600" />
@@ -348,11 +350,11 @@ export default function DashboardPage() {
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">
-                    {accountType === 'provider' ? 'My Services' : 'My Products'}
+                    {hasRole(ROLES.PROVIDER) ? 'My Services' : 'My Products'}
                   </dt>
                   <dd>
                     <div className="text-lg font-medium text-gray-900">
-                      {accountType === 'provider' 
+                      {hasRole(ROLES.PROVIDER)
                         ? (dashboardData.providers[0]?.servicesOffered?.length || 0)
                         : dashboardData.products.length || 0}
                     </div>
@@ -364,7 +366,7 @@ export default function DashboardPage() {
           <div className="bg-gray-50 px-5 py-3">
             <div className="text-sm">
               <Link
-                href={accountType === 'provider' ? "/dashboard/provider" : "/dashboard/products"}
+                href={hasRole(ROLES.PROVIDER) ? "/dashboard/provider" : "/dashboard/products"}
                 className="font-medium text-emerald-600 hover:text-emerald-500"
               >
                 View all
@@ -405,7 +407,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {accountType === 'provider' && (
+        {hasRole(ROLES.PROVIDER) && (
           <div className="bg-white overflow-hidden shadow rounded-lg">
             <div className="p-5">
               <div className="flex items-center">
@@ -452,7 +454,7 @@ export default function DashboardPage() {
                   </dt>
                   <dd>
                     <div className="text-lg font-medium text-gray-900">
-                      {accountType === 'provider' ? 'Provider' : 'Product Seller'}
+                      {hasRole(ROLES.PROVIDER) ? 'Provider' : 'Product Seller'}
                     </div>
                   </dd>
                 </dl>

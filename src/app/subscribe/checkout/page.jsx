@@ -1,25 +1,33 @@
-// src/app/subscribe/checkout/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { CreditCard, PenLine, ShoppingBag, Loader2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/providers/auth';
+import { ROLES } from '@/lib/constants';
 
 export default function CheckoutPage() {
   const { user, loading, isAuthenticated } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [accountType, setAccountType] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [apiRetryCount, setApiRetryCount] = useState(0);
+  
+  // Check if user canceled the Stripe checkout
+  const canceled = searchParams.get('canceled') === 'true';
 
   // Redirect if not authenticated
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      router.push('/auth/signin?callbackUrl=/subscribe/checkout');
+      router.push('/auth/login?callbackUrl=/subscribe/checkout');
     }
-  }, [loading, isAuthenticated, router]);
+    
+    if (canceled) {
+      setError('Payment was canceled. Please try again when you are ready.');
+    }
+  }, [loading, isAuthenticated, router, canceled]);
 
   // Handle subscription checkout
   const handleSubscribe = async () => {
@@ -28,7 +36,12 @@ export default function CheckoutPage() {
       return;
     }
 
-    setIsLoading(true);
+    if (!user || !user.id) {
+      setError('User information is missing. Please sign in again.');
+      return;
+    }
+
+    setIsSubmitting(true);
     setError('');
 
     try {
@@ -37,40 +50,49 @@ export default function CheckoutPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ accountType }),
+        credentials: 'include',
+        body: JSON.stringify({
+          accountType,
+          userIdFromClient: user.id
+        }),
       });
-
-      // Handle the response
-      if (response.status === 401) {
-        // Authentication issue
-        if (apiRetryCount < 2) {
-          // Try once more after a short delay (cookie might not be ready yet)
-          setApiRetryCount(prev => prev + 1);
-          setTimeout(() => {
-            setIsLoading(false);
-            handleSubscribe();
-          }, 1000);
-          return;
-        } else {
-          setError('Authentication error. Please try signing out and back in.');
-          setIsLoading(false);
-          return;
-        }
-      }
 
       const data = await response.json();
 
-      if (response.ok) {
-        // Redirect to Stripe checkout
-        window.location.href = data.data.checkoutUrl;
+      // Handle the response
+      if (response.ok && data.success) {
+        // Check if user already has subscription and should redirect to dashboard
+        if (data.data?.hasExistingSubscription && data.data?.redirectToDashboard) {
+          // User already has an active subscription, redirect to dashboard
+          router.push('/dashboard');
+          return;
+        }
+
+        // Regular flow - redirect to Stripe checkout
+        if (data.data?.checkoutUrl) {
+          window.location.href = data.data.checkoutUrl;
+        } else {
+          setError('No checkout URL received from server.');
+        }
       } else {
+        // Authentication issue
+        if (response.status === 401 && apiRetryCount < 2) {
+          // Try once more after a short delay
+          setApiRetryCount(prev => prev + 1);
+          setTimeout(() => {
+            setIsSubmitting(false);
+            handleSubscribe();
+          }, 1000);
+          return;
+        }
+        
         setError(data.message || 'An error occurred during checkout');
-        setIsLoading(false);
       }
     } catch (err) {
       console.error('Subscription error:', err);
       setError('Failed to process subscription. Please try again.');
-      setIsLoading(false);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -110,20 +132,19 @@ export default function CheckoutPage() {
 
         {/* Account Type Selection */}
         <div className="mt-12 space-y-4">
-          <div 
-            className={`border rounded-lg p-6 cursor-pointer transition-all ${
-              accountType === 'provider' 
-                ? 'border-emerald-600 bg-emerald-50' 
+          <div
+            className={`border rounded-lg p-6 cursor-pointer transition-all ${accountType === ROLES.PROVIDER
+                ? 'border-emerald-600 bg-emerald-50'
                 : 'border-gray-300 hover:border-emerald-300'
-            }`}
-            onClick={() => setAccountType('provider')}
+              }`}
+            onClick={() => setAccountType(ROLES.PROVIDER)}
           >
             <div className="flex items-start">
-              <div className={`flex h-6 items-center ${accountType === 'provider' ? 'text-emerald-600' : 'text-gray-400'}`}>
+              <div className={`flex h-6 items-center ${accountType === ROLES.PROVIDER ? 'text-emerald-600' : 'text-gray-400'}`}>
                 <input
                   type="radio"
-                  checked={accountType === 'provider'}
-                  onChange={() => setAccountType('provider')}
+                  checked={accountType === ROLES.PROVIDER}
+                  onChange={() => setAccountType(ROLES.PROVIDER)}
                   className="h-4 w-4 border-gray-300 text-emerald-600 focus:ring-emerald-600"
                 />
               </div>
@@ -145,20 +166,19 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          <div 
-            className={`border rounded-lg p-6 cursor-pointer transition-all ${
-              accountType === 'product_seller' 
-                ? 'border-emerald-600 bg-emerald-50' 
+          <div
+            className={`border rounded-lg p-6 cursor-pointer transition-all ${accountType === ROLES.PRODUCT_SELLER
+                ? 'border-emerald-600 bg-emerald-50'
                 : 'border-gray-300 hover:border-emerald-300'
-            }`}
-            onClick={() => setAccountType('product_seller')}
+              }`}
+            onClick={() => setAccountType(ROLES.PRODUCT_SELLER)}
           >
             <div className="flex items-start">
-              <div className={`flex h-6 items-center ${accountType === 'product_seller' ? 'text-emerald-600' : 'text-gray-400'}`}>
+              <div className={`flex h-6 items-center ${accountType === ROLES.PRODUCT_SELLER ? 'text-emerald-600' : 'text-gray-400'}`}>
                 <input
                   type="radio"
-                  checked={accountType === 'product_seller'}
-                  onChange={() => setAccountType('product_seller')}
+                  checked={accountType === ROLES.PRODUCT_SELLER}
+                  onChange={() => setAccountType(ROLES.PRODUCT_SELLER)}
                   className="h-4 w-4 border-gray-300 text-emerald-600 focus:ring-emerald-600"
                 />
               </div>
@@ -217,14 +237,13 @@ export default function CheckoutPage() {
             <button
               type="button"
               onClick={handleSubscribe}
-              disabled={!accountType || isLoading}
-              className={`flex w-full items-center justify-center rounded-md border border-transparent px-6 py-3 text-base font-medium text-white shadow-sm ${
-                !accountType || isLoading
+              disabled={!accountType || isSubmitting}
+              className={`flex w-full items-center justify-center rounded-md border border-transparent px-6 py-3 text-base font-medium text-white shadow-sm ${!accountType || isSubmitting
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2'
-              }`}
+                }`}
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <>
                   <Loader2 className="h-5 w-5 mr-2 animate-spin" />
                   Processing...

@@ -1,154 +1,119 @@
-// src/app/dashboard/subscription/page.jsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/providers/auth';
 import { 
   CreditCard, 
   Calendar, 
-  ToggleLeft, 
-  ToggleRight, 
   Clock, 
+  RefreshCw, 
+  Loader2, 
   AlertTriangle, 
-  Check, 
-  Loader2 
+  ExternalLink,
+  CheckCircle
 } from 'lucide-react';
+import { useAuth } from '@/providers/auth';
 
-export default function SubscriptionManagementPage() {
-  const { user, isAuthenticated, loading } = useAuth();
+export default function SubscriptionPage() {
+  const { user, loading, isAuthenticated } = useAuth();
   const router = useRouter();
-  const [subscriptionData, setSubscriptionData] = useState(null);
+  const [subscriptionInfo, setSubscriptionInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [redirecting, setRedirecting] = useState(false);
+  const [managementSuccess, setManagementSuccess] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      router.push('/auth/signin?callbackUrl=/dashboard/subscription');
+      router.push('/auth/login?callbackUrl=/dashboard/subscription');
+    } else if (!loading && isAuthenticated) {
+      fetchSubscriptionStatus();
     }
   }, [loading, isAuthenticated, router]);
 
-  // Fetch subscription data
+  // Fetch subscription status
+  const fetchSubscriptionStatus = async () => {
+    setIsLoading(true);
+    setError('');
+    
+    try {
+      const response = await fetch('/api/subscriptions/status', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setSubscriptionInfo(data.data);
+        
+        // If no subscription, redirect to subscribe page
+        if (!data.data.hasSubscription) {
+          router.push('/subscribe');
+        }
+      } else {
+        setError(data.message || 'Failed to load subscription information');
+      }
+    } catch (error) {
+      console.error('Error fetching subscription:', error);
+      setError('Failed to load subscription details. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle manage subscription
+  const handleManageSubscription = async () => {
+    setRedirecting(true);
+    setError('');
+    
+    try {
+      const response = await fetch('/api/subscriptions/manage', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          returnUrl: window.location.origin + '/dashboard/subscription?managed=true'
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        // Redirect to Stripe customer portal
+        window.location.href = data.data.url;
+      } else {
+        setError(data.message || 'Failed to open subscription management portal');
+        setRedirecting(false);
+      }
+    } catch (error) {
+      console.error('Error managing subscription:', error);
+      setError('Failed to open subscription management portal. Please try again.');
+      setRedirecting(false);
+    }
+  };
+
+  // Check URL params for management success
   useEffect(() => {
-    const fetchSubscriptionData = async () => {
-      if (!isAuthenticated || loading) return;
-
-      try {
-        setIsLoading(true);
-        const response = await fetch('/api/subscriptions/status');
-        const data = await response.json();
-
-        if (response.ok) {
-          setSubscriptionData(data.data);
-        } else {
-          setError(data.message || 'Failed to fetch subscription data');
-        }
-      } catch (err) {
-        console.error('Error fetching subscription data:', err);
-        setError('An error occurred while loading your subscription data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSubscriptionData();
-  }, [isAuthenticated, loading]);
-
-  // Toggle auto-renewal
-  const handleToggleAutoRenew = async () => {
-    try {
-      setIsUpdating(true);
-      setError('');
-      setSuccessMessage('');
-
-      const response = await fetch('/api/subscriptions/toggle-auto-renew', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          autoRenew: !subscriptionData.subscription.autoRenew,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSuccessMessage(data.message);
-        // Update local state
-        setSubscriptionData(prev => ({
-          ...prev,
-          subscription: {
-            ...prev.subscription,
-            autoRenew: data.data.autoRenew,
-            cancelAtPeriodEnd: data.data.cancelAtPeriodEnd,
-          }
-        }));
-      } else {
-        setError(data.message || 'Failed to update auto-renewal settings');
-      }
-    } catch (err) {
-      console.error('Error updating auto-renewal:', err);
-      setError('An error occurred while updating your subscription');
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // Cancel subscription
-  const handleCancelSubscription = async (immediately = false) => {
-    if (!confirm(`Are you sure you want to cancel your subscription${immediately ? ' immediately' : ' at the end of the billing period'}?`)) {
-      return;
-    }
-
-    try {
-      setIsUpdating(true);
-      setError('');
-      setSuccessMessage('');
-
-      const response = await fetch('/api/subscriptions/cancel', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          cancelImmediately: immediately,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setSuccessMessage(data.message);
-        
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('managed') === 'true') {
+        setManagementSuccess(true);
         // Refresh subscription data
-        const statusResponse = await fetch('/api/subscriptions/status');
-        const statusData = await statusResponse.json();
-        
-        if (statusResponse.ok) {
-          setSubscriptionData(statusData.data);
-        }
-        
-        // If canceled immediately, redirect to dashboard after a short delay
-        if (immediately) {
-          setTimeout(() => {
-            router.push('/dashboard');
-          }, 2000);
-        }
-      } else {
-        setError(data.message || 'Failed to cancel subscription');
+        fetchSubscriptionStatus();
+        // Clear the URL parameter
+        window.history.replaceState({}, document.title, '/dashboard/subscription');
       }
-    } catch (err) {
-      console.error('Error canceling subscription:', err);
-      setError('An error occurred while canceling your subscription');
-    } finally {
-      setIsUpdating(false);
     }
-  };
+  }, []);
 
+  // Show loading state
   if (loading || isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -157,243 +122,208 @@ export default function SubscriptionManagementPage() {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="h-10 w-10 text-emerald-600 animate-spin mx-auto mb-4" />
-          <h2 className="text-xl font-medium text-gray-900">Please sign in to access your subscription</h2>
-          <p className="mt-2 text-sm text-gray-500">Redirecting to sign in page...</p>
+  return (
+    <div className="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+      <div className="md:flex md:items-center md:justify-between mb-6">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate sm:text-3xl sm:tracking-tight">
+            Subscription Management
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            View and manage your subscription details
+          </p>
         </div>
       </div>
-    );
-  }
-
-  if (!subscriptionData?.hasSubscription) {
-    return (
-      <div className="max-w-3xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
-        <div className="bg-white shadow sm:rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">No Active Subscription</h3>
-            <div className="mt-2 max-w-xl text-sm text-gray-500">
-              <p>You don't currently have an active subscription.</p>
+      
+      {/* Success message for returning from Stripe portal */}
+      {managementSuccess && (
+        <div className="rounded-md bg-green-50 p-4 mb-6">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <CheckCircle className="h-5 w-5 text-green-400" />
             </div>
-            <div className="mt-5">
-              <button
-                type="button"
-                onClick={() => router.push('/subscribe')}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 text-sm"
-              >
-                Subscribe Now
-              </button>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-green-800">
+                Subscription updated successfully
+              </h3>
+              <div className="mt-2 text-sm text-green-700">
+                <p>Your subscription changes have been applied.</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  const { subscription } = subscriptionData;
-
-  return (
-    <div className="max-w-3xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
-      <h1 className="text-2xl font-bold mb-8">Subscription Management</h1>
+      )}
       
+      {/* Error message */}
       {error && (
-        <div className="mb-6 bg-red-50 border-l-4 border-red-400 p-4">
+        <div className="rounded-md bg-red-50 p-4 mb-6">
           <div className="flex">
             <div className="flex-shrink-0">
               <AlertTriangle className="h-5 w-5 text-red-400" />
             </div>
             <div className="ml-3">
-              <p className="text-sm text-red-700">{error}</p>
+              <h3 className="text-sm font-medium text-red-800">Error</h3>
+              <div className="mt-2 text-sm text-red-700">
+                <p>{error}</p>
+              </div>
             </div>
           </div>
         </div>
       )}
       
-      {successMessage && (
-        <div className="mb-6 bg-green-50 border-l-4 border-green-400 p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <Check className="h-5 w-5 text-green-400" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-green-700">{successMessage}</p>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Subscription Details Card */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-6">
-        <div className="px-4 py-5 sm:px-6 bg-emerald-50">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">Subscription Details</h3>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">Your HappyLife.Services subscription information.</p>
-        </div>
-        <div className="border-t border-gray-200">
-          <dl>
-            <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Status</dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                <span 
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    subscription.status === 'active' ? 'bg-green-100 text-green-800' : 
-                    subscription.status === 'past_due' ? 'bg-yellow-100 text-yellow-800' : 
-                    'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {subscription.status === 'active' ? 'Active' : 
-                   subscription.status === 'past_due' ? 'Payment Past Due' : 
-                   subscription.status === 'canceled' ? 'Canceled' : 
-                   subscription.status}
-                </span>
-              </dd>
-            </div>
-            <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Plan</dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                {subscription.plan === 'provider' ? 'Service Provider' : 'Product Seller'} ($20.00/month)
-              </dd>
-            </div>
-            <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Renewal Date</dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2 flex items-center">
-                <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                {new Date(subscription.currentPeriodEnd).toLocaleDateString()} 
-                <span className="ml-2 text-gray-500">
-                  ({subscription.daysUntilRenewal} {subscription.daysUntilRenewal === 1 ? 'day' : 'days'} remaining)
-                </span>
-              </dd>
-            </div>
-            <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Auto-Renewal</dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+      {/* Subscription info card */}
+      {!isLoading && subscriptionInfo?.hasSubscription && (
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-4 py-5 sm:p-6">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">
+              Subscription Details
+            </h3>
+            
+            <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center">
-                  {subscription.autoRenew ? (
-                    <>
-                      <ToggleRight className="h-5 w-5 text-emerald-600 mr-2" />
-                      <span>Enabled</span>
-                    </>
-                  ) : (
-                    <>
-                      <ToggleLeft className="h-5 w-5 text-gray-400 mr-2" />
-                      <span>Disabled</span>
-                    </>
+                  <CreditCard className="h-5 w-5 text-emerald-600 mr-2" />
+                  <h4 className="text-sm font-medium text-gray-900">Plan</h4>
+                </div>
+                <p className="mt-1 text-sm text-gray-600">
+                  {subscriptionInfo.subscription.plan === 'provider' ? 'Service Provider' : 'Product Seller'}
+                </p>
+                <p className="text-sm font-medium text-emerald-600">
+                  $20.00/month
+                </p>
+              </div>
+              
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex items-center">
+                  <Calendar className="h-5 w-5 text-emerald-600 mr-2" />
+                  <h4 className="text-sm font-medium text-gray-900">Billing Period</h4>
+                </div>
+                <p className="mt-1 text-sm text-gray-600">
+                  Current period ends:
+                </p>
+                <p className="text-sm">
+                  {new Date(subscriptionInfo.subscription.currentPeriodEnd).toLocaleDateString()} 
+                  {subscriptionInfo.subscription.daysUntilRenewal && (
+                    <span className="ml-1 text-gray-500">
+                      ({subscriptionInfo.subscription.daysUntilRenewal} days)
+                    </span>
                   )}
-                  
-                  <button
-                    onClick={handleToggleAutoRenew}
-                    disabled={isUpdating}
-                    className="ml-4 inline-flex items-center px-2.5 py-1.5 border border-transparent text-xs font-medium rounded text-emerald-700 bg-emerald-100 hover:bg-emerald-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isUpdating ? (
-                      <>
-                        <Loader2 className="animate-spin h-4 w-4 mr-1" />
-                        Updating...
-                      </>
-                    ) : (
-                      subscription.autoRenew ? 'Disable' : 'Enable'
-                    )}
-                  </button>
-                </div>
-                
-                {!subscription.autoRenew && (
-                  <p className="mt-2 text-sm text-gray-500">
-                    Your subscription will end on {new Date(subscription.currentPeriodEnd).toLocaleDateString()} and will not be renewed.
-                  </p>
-                )}
-              </dd>
-            </div>
-            <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-              <dt className="text-sm font-medium text-gray-500">Subscription History</dt>
-              <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                </p>
+              </div>
+              
+              <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex items-center">
-                  <Clock className="h-4 w-4 text-gray-400 mr-2" />
-                  <span>
-                    Renewal count: {subscription.renewalCount || 0} {subscription.renewalCount === 1 ? 'time' : 'times'}
-                  </span>
+                  <Clock className="h-5 w-5 text-emerald-600 mr-2" />
+                  <h4 className="text-sm font-medium text-gray-900">Status</h4>
                 </div>
-              </dd>
+                <p className="mt-1">
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      subscriptionInfo.subscription.status === 'active' ? 'bg-green-100 text-green-800' :
+                      subscriptionInfo.subscription.status === 'past_due' ? 'bg-yellow-100 text-yellow-800' :
+                      subscriptionInfo.subscription.status === 'canceled' ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}
+                  >
+                    {subscriptionInfo.subscription.status === 'active' ? 'Active' :
+                      subscriptionInfo.subscription.status === 'past_due' ? 'Payment Past Due' :
+                      subscriptionInfo.subscription.status === 'canceled' ? 'Canceled' :
+                      subscriptionInfo.subscription.status}
+                  </span>
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {subscriptionInfo.subscription.cancelAtPeriodEnd ? 
+                    'Cancels at period end' : 
+                    'Renews automatically'}
+                </p>
+              </div>
             </div>
-          </dl>
-        </div>
-      </div>
-      
-      {/* Actions */}
-      <div className="bg-white shadow sm:rounded-lg mb-6">
-        <div className="px-4 py-5 sm:p-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">Manage Subscription</h3>
-          <div className="mt-2 max-w-xl text-sm text-gray-500">
-            <p>Make changes to your subscription or cancel it if needed.</p>
-          </div>
-          <div className="mt-5 space-y-4">
-            {!subscription.cancelAtPeriodEnd && (
-              <button
-                type="button"
-                onClick={() => handleCancelSubscription(false)}
-                disabled={isUpdating}
-                className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isUpdating ? (
-                  <>
-                    <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                    Processing...
-                  </>
-                ) : (
-                  'Cancel at Renewal Date'
-                )}
-              </button>
+            
+            {/* Warning messages for different statuses */}
+            {subscriptionInfo.subscription.status === 'past_due' && (
+              <div className="mt-6 rounded-md bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <AlertTriangle className="h-5 w-5 text-yellow-400" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-yellow-700">
+                      Your subscription payment is past due. Please update your payment method to avoid losing access to your account.
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
             
-            <button
-              type="button"
-              onClick={() => handleCancelSubscription(true)}
-              disabled={isUpdating}
-              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isUpdating ? (
-                <>
-                  <Loader2 className="animate-spin h-4 w-4 mr-2" />
-                  Processing...
-                </>
-              ) : (
-                'Cancel Immediately'
-              )}
-            </button>
-          </div>
-          <div className="mt-3 text-xs text-gray-500">
-            <p>Immediate cancellation will end your subscription now and remove your provider/seller privileges.</p>
+            {subscriptionInfo.subscription.cancelAtPeriodEnd && (
+              <div className="mt-6 rounded-md bg-blue-50 border-l-4 border-blue-400 p-4">
+                <div className="flex">
+                  <div className="ml-3">
+                    <p className="text-sm text-blue-700">
+                      Your subscription is set to cancel at the end of the current billing period on {new Date(subscriptionInfo.subscription.currentPeriodEnd).toLocaleDateString()}.
+                      You can reactivate your subscription before this date to maintain uninterrupted access.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Management buttons */}
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={handleManageSubscription}
+                disabled={redirecting}
+                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:bg-emerald-400 disabled:cursor-not-allowed"
+              >
+                {redirecting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Redirecting...
+                  </>
+                ) : (
+                  <>
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    Manage Subscription
+                  </>
+                )}
+              </button>
+              
+              <button
+                type="button"
+                onClick={fetchSubscriptionStatus}
+                disabled={isLoading}
+                className="ml-3 inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:text-gray-400 disabled:cursor-not-allowed"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh Status
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
       
-      {/* FAQ section */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-        <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">Frequently Asked Questions</h3>
-        </div>
-        <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
-          <dl className="space-y-6">
-            <div>
-              <dt className="text-sm font-medium text-gray-900">What happens when I disable auto-renewal?</dt>
-              <dd className="mt-1 text-sm text-gray-500">
-                Your subscription will remain active until the current billing period ends. After that, your subscription will expire and you'll lose access to provider/seller features.
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-900">Can I reactivate my subscription after canceling?</dt>
-              <dd className="mt-1 text-sm text-gray-500">
-                Yes, you can subscribe again at any time. However, you may need to set up your provider profile or product listings again.
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-gray-900">Will I get a refund if I cancel my subscription?</dt>
-              <dd className="mt-1 text-sm text-gray-500">
-                We don't provide refunds for partial months. If you cancel, you'll maintain access until the end of your current billing period.
-              </dd>
-            </div>
-          </dl>
+      {/* Payment history section (placeholder) */}
+      <div className="mt-10">
+        <h3 className="text-lg leading-6 font-medium text-gray-900">
+          Payment History
+        </h3>
+        <div className="mt-3 bg-white shadow overflow-hidden sm:rounded-md">
+          <ul role="list" className="divide-y divide-gray-200">
+            {/* For now, just show a placeholder message. In a real app, fetch payment history */}
+            <li className="px-4 py-5 sm:px-6 text-center text-gray-500">
+              Payment history will appear here once available.
+            </li>
+          </ul>
         </div>
       </div>
     </div>
