@@ -9,15 +9,23 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@auth/mongodb-adapter": "^3.8.0",
+    "bcryptjs": "^3.0.2",
+    "lucide-react": "^0.483.0",
+    "mongodb": "^6.15.0",
+    "mongoose": "^8.12.2",
+    "next": "15.2.3",
+    "next-auth": "^4.24.11",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "next": "15.2.3"
+    "stripe": "^17.7.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "15.2.3",
-    "@eslint/eslintrc": "^3"
+    "tailwindcss": "^4"
   }
 }
