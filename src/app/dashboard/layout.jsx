@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+
 export default function DashboardLayout({ children }) {
     return (
         <ProtectedRoute>
@@ -18,11 +19,15 @@ function DashboardLayoutContent({ children }) {
     const pathname = usePathname();
     const { data: session } = useSession();
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const { hasActiveSubscription } = useSubscription();
 
     const isProvider = session?.user?.role === 'provider';
     const isSeller = session?.user?.role === 'seller';
     const isAdmin = session?.user?.role === 'admin';
     const isPremiumUser = isProvider || isSeller;
+    
+    // Check if user can access blogs (has active subscription)
+    const canAccessBlogs = hasActiveSubscription || session?.user?.isSubscribed;
 
     // Close the sidebar when clicking outside on mobile
     useEffect(() => {
@@ -110,34 +115,45 @@ function DashboardLayoutContent({ children }) {
                         Profile
                     </Link>
 
-                    <Link
-                        href="/messages"
-                        className={`flex items-center px-4 py-2 text-sm font-medium rounded-md ${pathname === '/messages' || pathname.startsWith('/messages/')
-                            ? 'bg-blue-50 text-blue-700'
-                            : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
-                            }`}
-                    >
-                        <svg
-                            className={`mr-3 h-5 w-5 ${pathname === '/messages' || pathname.startsWith('/messages/')
-                                ? 'text-blue-500'
-                                : 'text-gray-500'
+                   
+
+                    {/* Blogs section - available for any user with an active subscription */}
+                    {canAccessBlogs && (
+                        <Link
+                            href="/dashboard/blogs"
+                            className={`flex items-center px-4 py-2 text-sm font-medium rounded-md ${pathname === '/dashboard/blogs' || 
+                                pathname.startsWith('/dashboard/blogs/') ||
+                                pathname === '/blogs/manage' ||
+                                pathname === '/blogs/create' ||
+                                pathname.startsWith('/blogs/edit')
+                                ? 'bg-blue-50 text-blue-700'
+                                : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
                                 }`}
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
                         >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                            />
-                        </svg>
-                        Messages
-                    </Link>
-
-
+                            <svg
+                                className={`mr-3 h-5 w-5 ${pathname === '/dashboard/blogs' || 
+                                    pathname.startsWith('/dashboard/blogs/') ||
+                                    pathname === '/blogs/manage' ||
+                                    pathname === '/blogs/create' ||
+                                    pathname.startsWith('/blogs/edit')
+                                    ? 'text-blue-500'
+                                    : 'text-gray-500'
+                                    }`}
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"
+                                />
+                            </svg>
+                            Blogs
+                        </Link>
+                    )}
 
                     {isProvider && (
                         <Link
@@ -296,8 +312,11 @@ function DashboardLayoutContent({ children }) {
                         <div className="text-lg font-semibold text-gray-900 ml-2 md:ml-0">
                             {pathname === '/dashboard' && 'Dashboard'}
                             {pathname === '/profile' && 'Profile'}
-                            {pathname === '/profile/edit' && 'Edit Profile'}
-                            {pathname === '/messages' && 'Messages'}
+                            {pathname === '/profile/edit' && 'Edit Profile'} 
+                            {pathname === '/dashboard/blogs' && 'Manage Blogs'}
+                            {pathname === '/blogs/manage' && 'Manage Blogs'}
+                            {pathname === '/blogs/create' && 'Create Blog'}
+                            {pathname.startsWith('/blogs/edit/') && 'Edit Blog'}
                             {pathname === '/services/manage' && 'Manage Services'}
                             {pathname === '/products/manage' && 'Manage Products'}
                             {pathname === '/subscription' && 'Subscription'}

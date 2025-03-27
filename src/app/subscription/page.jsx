@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { useSubscription } from '@/contexts/SubscriptionContext'; // Import the subscription context
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import toast from 'react-hot-toast';
 
 export default function SubscriptionPage() {
   const router = useRouter();
   const { user, loading: authLoading, isAuthenticated, hasRole } = useAuth();
-  const { isLoading: subLoading, isSubscribed, subscription, refreshSubscription } = useSubscription(); // Use subscription context
+  const { isLoading: subLoading, isSubscribed, subscription, refreshSubscription } = useSubscription();
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -209,31 +209,26 @@ export default function SubscriptionPage() {
               <>
                 <h2 className="text-2xl font-bold text-gray-900">Subscription Details</h2>
                 <div className="mt-4 text-teal-600">
-                  <p className="text-2xl font-medium">Status: Active</p>
-                  <p className="text-lg mt-2">
-                    Next billing: {subscription?.subscriptionEnd || 'N/A'}
-                  </p>
+                  <p className="text-lg font-medium">Status: Active</p>
+                  <p className="text-lg mt-2">Next billing: N/A</p>
                 </div>
                 <p className="mt-5 text-gray-500">
                   Thank you for being a {user.role === 'provider' ? 'provider' : 'seller'} on HappyLife Services! Your subscription is active, and you can manage your listings from your dashboard.
                 </p>
 
-                <div className="mt-8">
+                <div className="mt-8 space-y-4">
                   <Link
                     href="/dashboard"
                     className="w-full block bg-gradient-to-r from-teal-600 to-green-600 hover:from-teal-700 hover:to-green-700 text-white py-3 px-4 rounded-md font-medium text-center"
                   >
                     Manage Listings
                   </Link>
-                  <button
-                    onClick={() => {
-                      toast.success('Cancellation not implemented yet'); // Placeholder
-                      // Add cancellation logic here, e.g., call /api/subscription/cancel
-                    }}
-                    className="w-full mt-4 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 px-4 rounded-md font-medium"
+                  <Link
+                    href="/subscription/cancel"
+                    className="w-full block bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 px-4 rounded-md font-medium text-center"
                   >
                     Cancel Subscription
-                  </button>
+                  </Link>
                 </div>
               </>
             )}
@@ -257,7 +252,7 @@ export default function SubscriptionPage() {
           </div>
         </div>
 
-        {/* FAQ Section */}
+        {/* FAQ Section for Non-Subscribers */}
         {!isSubscribed && (
           <div className="mt-10 text-center">
             <h3 className="text-lg font-medium text-gray-900">Frequently Asked Questions</h3>

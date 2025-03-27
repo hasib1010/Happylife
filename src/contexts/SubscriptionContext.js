@@ -3,91 +3,62 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 
-// Create context
 const SubscriptionContext = createContext();
 
-// Export the provider component
 export function SubscriptionProvider({ children }) {
-  const { data: session, update: updateSession } = useSession();
-  const [subscriptionData, setSubscriptionData] = useState({
-    isLoading: true,
-    isActive: false,
-    subscription: null,
-    userData: null,
-    error: null
-  });
+  const { data: session } = useSession();
+  const [subscription, setSubscription] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch subscription data from API
-  const fetchSubscriptionStatus = async () => {
-    if (!session?.user?.id) return;
-    
+  useEffect(() => {
+    // Only fetch subscription data if user is logged in
+    if (session?.user) {
+      fetchSubscriptionData();
+    } else {
+      setLoading(false);
+    }
+  }, [session]);
+
+  const fetchSubscriptionData = async () => {
     try {
-      setSubscriptionData(prev => ({ ...prev, isLoading: true }));
-      
       const response = await fetch('/api/subscription/status');
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setSubscriptionData({
-          isLoading: false,
-          isActive: data.isActive,
-          subscription: data.subscription,
-          userData: data.user,
-          error: null
-        });
-        
-        // Update session if there's a mismatch with the database
-        if (session?.user?.isSubscribed !== data.user.isSubscribed || 
-            session?.user?.subscriptionStatus !== data.user.subscriptionStatus) {
-          
-          await updateSession({
-            ...session,
-            user: {
-              ...session.user,
-              isSubscribed: data.user.isSubscribed,
-              subscriptionStatus: data.user.subscriptionStatus
-            }
-          });
-        }
-      } else {
-        throw new Error(data.message || 'Failed to fetch subscription status');
+      if (response.ok) {
+        const data = await response.json();
+        setSubscription(data.subscription);
       }
     } catch (error) {
-      console.error('Error fetching subscription status:', error);
-      setSubscriptionData(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error.message || 'An error occurred while fetching subscription status'
-      }));
+      console.error('Error fetching subscription data:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Initial fetch when session is available
-  useEffect(() => {
-    if (session?.user?.id) {
-      fetchSubscriptionStatus();
-    } else {
-      setSubscriptionData(prev => ({
-        ...prev,
-        isLoading: false
-      }));
-    }
-  }, [session?.user?.id]);
+  // Check if user has an active subscription
+  const hasActiveSubscription = () => {
+    if (!subscription) return false;
+    
+    // Check if the user has an active subscription status
+    const isActive = ['active', 'trialing'].includes(subscription.status);
+    
+    // Check if the subscription is still valid (not expired)
+    const isValid = subscription.currentPeriodEnd 
+      ? new Date(subscription.currentPeriodEnd) > new Date() 
+      : false;
+      
+    return isActive && isValid;
+  };
 
-  // Force refresh subscription status
+  // Refresh subscription data (useful after payment)
   const refreshSubscription = () => {
-    return fetchSubscriptionStatus();
+    setLoading(true);
+    return fetchSubscriptionData();
   };
 
-  // Values to provide in context
   const value = {
-    ...subscriptionData,
+    subscription,
+    loading,
+    hasActiveSubscription,
     refreshSubscription,
-    // Add some convenience properties
-    isSubscribed: subscriptionData.userData?.isSubscribed || false,
-    subscriptionStatus: subscriptionData.userData?.subscriptionStatus || null,
-    subscriptionEnd: subscriptionData.userData?.subscriptionEnd || null,
-    isPremiumUser: ['provider', 'seller'].includes(subscriptionData.userData?.role || '')
   };
 
   return (
@@ -97,7 +68,6 @@ export function SubscriptionProvider({ children }) {
   );
 }
 
-// Custom hook to use the subscription context
 export function useSubscription() {
   const context = useContext(SubscriptionContext);
   if (context === undefined) {
