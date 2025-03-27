@@ -159,13 +159,13 @@ export default function Navbar() {
                     {isPremiumUser && (
                       <>
                         <Link
-                          href={session.user.role === 'provider' ? '/services/manage' : '/products/manage'}
+                          href={session.user.role === 'provider' ? '/dashboard/services' : '/dashboard/products'}
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         >
                           {session.user.role === 'provider' ? 'Manage Services' : 'Manage Products'}
                         </Link>
                         <Link
-                          href="/subscription"
+                          href="/subscription/manage"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                         >
                           Subscription

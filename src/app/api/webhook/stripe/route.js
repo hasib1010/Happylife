@@ -6,7 +6,8 @@ import dbConnect from '@/lib/db';
 import User from '@/models/user';
 import Subscription from '@/models/subscription';
 import Service from '@/models/service';
-import Payment from '@/models/payment'; // Make sure you've created this model
+import Product from '@/models/product'; // Import the Product model
+import Payment from '@/models/payment';
 import mongoose from 'mongoose';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -14,7 +15,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 export async function POST(request) {
   try {
     // Get the Stripe signature from the request headers
-    // Fix: Await the headers() function
     const headersList = await headers();
     const sig = headersList.get('stripe-signature');
 
@@ -98,13 +98,19 @@ async function handleCheckoutSessionCompleted(event) {
     if (session.metadata?.type === 'service_feature') {
       console.log("This is a service feature payment. Metadata:", session.metadata);
       await handleFeaturePayment(session);
-      console.log("Finished handling feature payment");
+      console.log("Finished handling service feature payment");
+      return;
+    } 
+    // Check if this is a product feature payment
+    else if (session.metadata?.type === 'product_feature') {
+      console.log("This is a product feature payment. Metadata:", session.metadata);
+      await handleProductFeaturePayment(session);
+      console.log("Finished handling product feature payment");
       return;
     } else {
-      console.log("Not a service feature payment. Metadata:", session.metadata);
+      console.log("Not a feature payment. Metadata:", session.metadata);
     }
 
-    // Rest of the function remains the same
     // Check if this is a subscription checkout
     if (!session.subscription) {
       console.log('Checkout session does not include a subscription');
@@ -191,15 +197,18 @@ async function handleFeaturePayment(session) {
       await Payment.create({
         userId,
         serviceId,
-        stripeSessionId: session.id,
-        stripePaymentIntentId: session.payment_intent,
         amount: session.amount_total / 100, // Convert from cents to dollars
-        currency: session.currency,
-        type: 'feature',
+        currency: session.currency.toUpperCase(),
+        type: 'service_feature',
         status: 'completed',
+        paymentMethod: 'stripe',
+        paymentId: session.payment_intent || session.id,
+        sessionId: session.id,
+        description: `Featured service listing for 30 days`,
         metadata: {
           featureExpiration: featureExpiration
-        }
+        },
+        expiresAt: featureExpiration
       });
       console.log(`Payment record created for feature purchase`);
     } catch (paymentError) {
@@ -210,6 +219,79 @@ async function handleFeaturePayment(session) {
     return updateResult;
   } catch (error) {
     console.error(`Error processing feature payment:`, error);
+    throw error; // Re-throw to ensure the webhook knows there was an error
+  }
+}
+
+/**
+ * Handle product feature payment
+ * This processes payments for featuring products
+ */
+async function handleProductFeaturePayment(session) {
+  try {
+    const { productId, userId, expirationDate } = session.metadata;
+    
+    // Parse expiration date from metadata or set default (30 days)
+    const featureExpiration = expirationDate ? new Date(expirationDate) : new Date();
+    if (!expirationDate) {
+      featureExpiration.setDate(featureExpiration.getDate() + 30);
+    }
+
+    console.log(`Processing feature payment for product ${productId}, user ${userId}`);
+    console.log(`Setting feature expiration to: ${featureExpiration.toISOString()}`);
+
+    // Use findByIdAndUpdate for atomic update with validation
+    const updateResult = await Product.findByIdAndUpdate(
+      productId,
+      {
+        $set: {
+          isFeatured: true,
+          featureExpiration: featureExpiration,
+          lastPaymentId: session.payment_intent || session.id
+        }
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!updateResult) {
+      console.error(`Product not found with ID: ${productId}`);
+      return;
+    }
+
+    console.log(`Product updated successfully:`, {
+      id: updateResult._id,
+      title: updateResult.title || updateResult.name,
+      isFeatured: updateResult.isFeatured,
+      featureExpiration: updateResult.featureExpiration
+    });
+
+    // Record the payment in your database
+    try {
+      await Payment.create({
+        userId,
+        productId, // Use productId instead of serviceId
+        amount: session.amount_total / 100, // Convert from cents to dollars
+        currency: session.currency.toUpperCase(),
+        type: 'product_feature', // Use product_feature type
+        status: 'completed',
+        paymentMethod: 'stripe',
+        paymentId: session.payment_intent || session.id,
+        sessionId: session.id,
+        description: `Featured product listing for 30 days: ${updateResult.title || 'Product'}`,
+        metadata: {
+          featureExpiration: featureExpiration
+        },
+        expiresAt: featureExpiration
+      });
+      console.log(`Payment record created for product feature purchase`);
+    } catch (paymentError) {
+      // Don't fail the whole process if payment recording fails
+      console.error(`Error recording payment:`, paymentError);
+    }
+    
+    return updateResult;
+  } catch (error) {
+    console.error(`Error processing product feature payment:`, error);
     throw error; // Re-throw to ensure the webhook knows there was an error
   }
 }

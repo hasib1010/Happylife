@@ -1,9 +1,24 @@
 import { NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
-// This function can be marked `async` if using `await` inside
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
+  
+  // Check for cron job routes first
+  if (pathname.startsWith('/api/cron/')) {
+    // Verify cron secret token
+    const authHeader = request.headers.get('authorization');
+    const expectedAuth = `Bearer ${process.env.CRON_SECRET_TOKEN}`;
+    
+    if (!authHeader || authHeader !== expectedAuth) {
+      return NextResponse.json(
+        { error: 'Unauthorized access to cron endpoint' },
+        { status: 401 }
+      );
+    }
+    
+    return NextResponse.next();
+  }
   
   // Define paths that are protected
   const protectedPaths = [
@@ -105,5 +120,6 @@ export const config = {
     '/products/manage/:path*',
     '/auth/signin',
     '/auth/signup',
+    '/api/cron/:path*', // Add cron job routes to the matcher
   ],
 };

@@ -12,6 +12,10 @@ const PaymentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Service',
     },
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product',
+    },
     amount: {
       type: Number,
       required: true,
@@ -24,7 +28,7 @@ const PaymentSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['service_feature', 'subscription', 'booking', 'other'],
+      enum: ['service_feature', 'product_feature', 'subscription', 'booking', 'other'],
       required: true,
     },
     status: {
@@ -74,11 +78,17 @@ PaymentSchema.index({ userId: 1 });
 // Index to find payments by service
 PaymentSchema.index({ serviceId: 1 });
 
+// Index to find payments by product
+PaymentSchema.index({ productId: 1 });
+
 // Index to find payments by payment ID
 PaymentSchema.index({ paymentId: 1 });
 
 // Compound index for service and type
 PaymentSchema.index({ serviceId: 1, type: 1 });
+
+// Compound index for product and type
+PaymentSchema.index({ productId: 1, type: 1 });
 
 // Method to check if a payment is still active
 PaymentSchema.methods.isActive = function() {

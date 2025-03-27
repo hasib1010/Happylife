@@ -24,7 +24,7 @@ export default function Dashboard() {
 
     try {
       setIsLoading(true);
-      const response = await fetch('/api/user/profile');
+      const response = await fetch('/api/user/dashboard');
 
       if (!response.ok) {
         throw new Error('Failed to fetch user profile');
