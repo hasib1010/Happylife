@@ -1,8 +1,9 @@
 // src/lib/s3.js
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import crypto from 'crypto';
 
+// AWS S3 client setup
 const s3Client = new S3Client({
   region: process.env.AWS_REGION,
   credentials: {
@@ -11,81 +12,50 @@ const s3Client = new S3Client({
   },
 });
 
-const bucketName = process.env.AWS_S3_BUCKET_NAME;
-
-// Generate a unique filename with a timestamp and random string
-const generateUniqueFileName = (originalName) => {
+// Generate a unique filename to prevent overwriting
+export const generateUniqueFileName = (originalName) => {
   const timestamp = Date.now();
   const randomString = crypto.randomBytes(16).toString('hex');
-  const fileExtension = originalName.split('.').pop();
-  return `${timestamp}-${randomString}.${fileExtension}`;
+  const extension = originalName.split('.').pop();
+  return `${timestamp}-${randomString}.${extension}`;
 };
 
-// Get S3 key based on file type and user ID
-const getS3Key = (userId, fileType, fileName) => {
-  const folders = {
-    'profile': `users/${userId}/profile`,
-    'provider': `providers/${userId}`,
-    'product': `products/${userId}`,
-    'blog': `blogs/${userId}`,
-    'certification': `providers/${userId}/certifications`,
-  };
-  
-  const folder = folders[fileType] || 'uploads';
-  return `${folder}/${fileName}`;
-};
-
-// Upload a file to S3
-export const uploadFileToS3 = async (file, userId, fileType) => {
+// Upload file to S3
+export const uploadFile = async (file, folder = '') => {
   try {
-    const uniqueFileName = generateUniqueFileName(file.name);
-    const key = getS3Key(userId, fileType, uniqueFileName);
+    const fileName = generateUniqueFileName(file.name);
+    const path = folder ? `${folder}/${fileName}` : fileName;
     
     const params = {
-      Bucket: bucketName,
-      Key: key,
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: path,
       Body: file.buffer,
       ContentType: file.mimetype,
     };
+
+    await s3Client.send(new PutObjectCommand(params));
     
-    const command = new PutObjectCommand(params);
-    await s3Client.send(command);
-    
-    return `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
+    // Return the URL to the uploaded file
+    return `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${path}`;
   } catch (error) {
     console.error('Error uploading file to S3:', error);
     throw new Error('Failed to upload file');
   }
 };
 
-// Get a presigned URL for temporary access to a file
-export const getPresignedUrl = async (key) => {
+// Delete file from S3
+export const deleteFile = async (fileUrl) => {
   try {
-    const command = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-    });
+    // Extract the key from the URL
+    const url = new URL(fileUrl);
+    const key = url.pathname.substring(1); // Remove leading slash
     
-    // URL expires in 1 hour (3600 seconds)
-    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-    return presignedUrl;
-  } catch (error) {
-    console.error('Error generating presigned URL:', error);
-    throw new Error('Failed to generate file access URL');
-  }
-};
-
-// Delete a file from S3
-export const deleteFileFromS3 = async (key) => {
-  try {
     const params = {
-      Bucket: bucketName,
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
       Key: key,
     };
-    
-    const command = new DeleteObjectCommand(params);
-    await s3Client.send(command);
-    
+
+    await s3Client.send(new DeleteObjectCommand(params));
     return true;
   } catch (error) {
     console.error('Error deleting file from S3:', error);
@@ -93,10 +63,31 @@ export const deleteFileFromS3 = async (key) => {
   }
 };
 
-// Extract key from S3 URL
-export const getKeyFromUrl = (url) => {
-  const urlObj = new URL(url);
-  // The key is the path without the leading slash
-  return urlObj.pathname.slice(1);
+// Generate a pre-signed URL for reading a file (time-limited access)
+export const getSignedFileUrl = async (fileUrl, expiresIn = 3600) => {
+  try {
+    // Extract the key from the URL
+    const url = new URL(fileUrl);
+    const key = url.pathname.substring(1); // Remove leading slash
+    
+    const params = {
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: key,
+    };
+
+    const command = new GetObjectCommand(params);
+    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn });
+    
+    return signedUrl;
+  } catch (error) {
+    console.error('Error generating signed URL:', error);
+    throw new Error('Failed to generate signed URL');
+  }
 };
- 
+
+export default {
+  uploadFile,
+  deleteFile,
+  getSignedFileUrl,
+  generateUniqueFileName,
+};

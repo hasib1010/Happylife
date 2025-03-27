@@ -1,187 +1,137 @@
-// src/models/User.js
+// src/models/user.js
 import mongoose from 'mongoose';
-import { Schema } from 'mongoose';
-import { ROLES, PERMISSIONS, DEFAULT_ROLE_PERMISSIONS, mapRoleToAccountType } from '@/lib/constants';
+import bcrypt from 'bcryptjs';
 
-const UserSchema = new Schema({
-  name: {
-    type: String,
-    required: [true, 'Please provide a name'],
-    trim: true,
+const UserSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: [true, 'Please provide a name'],
+      maxlength: [60, 'Name cannot be more than 60 characters'],
+    },
+    email: {
+      type: String,
+      required: [true, 'Please provide an email'],
+      unique: true,
+      lowercase: true,
+      trim: true,
+      match: [
+        /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
+        'Please provide a valid email',
+      ],
+    },
+    password: {
+      type: String,
+      required: function() {
+        return !this.googleId; // Password required only if not using Google OAuth
+      },
+      minlength: [6, 'Password must be at least 6 characters'],
+      select: false, // Don't return password by default
+    },
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true, // Allows multiple null values
+    },
+    profilePicture: {
+      type: String,
+      default: '',
+    },
+    role: {
+      type: String,
+      enum: ['user', 'provider', 'seller', 'admin'],
+      default: 'user',
+    },
+    bio: {
+      type: String,
+      maxlength: [500, 'Bio cannot be more than 500 characters'],
+    },
+    phoneNumber: {
+      type: String,
+      trim: true,
+    },
+    address: {
+      street: String,
+      city: String,
+      state: String,
+      zipCode: String,
+      country: String,
+    },
+    // Provider/Seller specific fields
+    businessName: {
+      type: String,
+      trim: true,
+    },
+    businessDescription: {
+      type: String,
+      maxlength: [1000, 'Description cannot be more than 1000 characters'],
+    },
+    categories: [{
+      type: String,
+    }],
+    // Subscription related fields
+    isSubscribed: {
+      type: Boolean,
+      default: false,
+    },
+    stripeCustomerId: String,
+    stripeSubscriptionId: String,
+    subscriptionStatus: {
+      type: String,
+      enum: ['active', 'trialing', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired', null],
+      default: null,
+    },
+    subscriptionPlan: {
+      type: String,
+      default: null,
+    },
+    subscriptionStart: Date,
+    subscriptionEnd: Date,
+    // Account status
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
   },
-  email: {
-    type: String,
-    required: [true, 'Please provide an email'],
-    unique: true,
-    trim: true,
-    lowercase: true,
-    match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email'],
-  },
-  password: {
-    type: String,
-    required: [true, 'Please provide a password'],
-    minlength: 8,
-  },
-  // Replace simple accountType with robust role-based system
-  role: {
-    type: String,
-    enum: Object.values(ROLES),
-    default: ROLES.REGULAR,
-  },
-  // Store custom permissions that override defaults
-  permissions: {
-    type: Map,
-    of: String,
-    default: {},
-  },
-  // Backward compatibility for existing code
-  accountType: {
-    type: String,
-    enum: ['regular', 'provider', 'product_seller', 'admin'],
-    default: 'regular',
-  },
-  subscriptionStatus: {
-    type: String,
-    enum: ['none', 'active', 'canceled', 'past_due', 'unpaid'],
-    default: 'none',
-  },
-  subscriptionId: {
-    type: Schema.Types.ObjectId,
-    ref: 'Subscription',
-  },
-  stripeCustomerId: {
-    type: String,
-  },
-  profileImage: {
-    type: String,
-    default: '',
-  },
-  // Added for our custom authentication system
-  sessionToken: {
-    type: String,
-  },
-  // Added to track session expiration time
-  sessionExpiry: {
-    type: Date,
-  },
-  savedProducts: [{
-    type: Schema.Types.ObjectId,
-    ref: 'Product',
-  }],
-  savedProviders: [{
-    type: Schema.Types.ObjectId,
-    ref: 'Provider',
-  }],
-  bookings: [{
-    type: Schema.Types.ObjectId,
-    ref: 'Booking',
-  }],
-  // Track last login info
-  lastLogin: {
-    date: Date,
-    ip: String,
-    userAgent: String
-  },
-  // Account status
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  // Email verification
-  isEmailVerified: {
-    type: Boolean,
-    default: false
-  },
-  emailVerificationToken: String,
-  emailVerificationExpiry: Date,
-  // Password reset
-  passwordResetToken: String,
-  passwordResetExpiry: Date,
-  // Two-factor authentication
-  twoFactorEnabled: {
-    type: Boolean,
-    default: false
-  },
-  twoFactorSecret: String,
-  // Login attempts security
-  loginAttempts: {
-    type: Number,
-    default: 0
-  },
-  lockUntil: Date,
-}, { 
-  timestamps: true,
-});
-
-// Virtual for full name
-UserSchema.virtual('fullName').get(function() {
-  return `${this.name}`;
-});
-
-// Method to get effective permissions (combines role defaults with custom overrides)
-UserSchema.methods.getPermissions = function() {
-  const rolePermissions = DEFAULT_ROLE_PERMISSIONS[this.role] || DEFAULT_ROLE_PERMISSIONS[ROLES.REGULAR];
-  const customPermissions = this.permissions ? Object.fromEntries(this.permissions) : {};
-  
-  return {
-    ...rolePermissions,
-    ...customPermissions
-  };
-};
-
-// Method to check if user has permission for a specific action
-UserSchema.methods.hasPermission = function(area, level) {
-  const permissions = this.getPermissions();
-  const areaPermission = permissions[area];
-  
-  if (!areaPermission) return false;
-  
-  // Permission hierarchy
-  const permissionLevels = {
-    [PERMISSIONS.READ_ONLY]: 1,
-    [PERMISSIONS.MANAGE_OWN]: 2,
-    [PERMISSIONS.MANAGE_ALL]: 3,
-    [PERMISSIONS.FULL_ACCESS]: 4
-  };
-  
-  return permissionLevels[areaPermission] >= permissionLevels[level];
-};
-
-// Method to check if user is an admin (for backward compatibility)
-UserSchema.methods.isAdmin = function() {
-  return this.role === ROLES.ADMIN || this.role === ROLES.SUPER_ADMIN;
-};
-
-// Method to check if user can access admin panel
-UserSchema.methods.canAccessAdminPanel = function() {
-  return [ROLES.MANAGER, ROLES.ADMIN, ROLES.SUPER_ADMIN].includes(this.role);
-};
-
-// Middleware to sync accountType with role for backward compatibility
-UserSchema.pre('save', function(next) {
-  // Map role to accountType
-  if (this.isModified('role')) {
-    this.accountType = mapRoleToAccountType(this.role);
+  {
+    timestamps: true, // Adds createdAt and updatedAt
   }
+);
+
+// Hash password before saving
+UserSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) return next();
   
-  // Map accountType to role if role isn't set explicitly
-  if (this.isModified('accountType') && !this.isModified('role')) {
-    switch(this.accountType) {
-      case 'provider':
-        this.role = ROLES.PROVIDER;
-        break;
-      case 'product_seller':
-        this.role = ROLES.PRODUCT_SELLER;
-        break;
-      case 'admin':
-        this.role = ROLES.ADMIN;
-        break;
-      default:
-        this.role = ROLES.REGULAR;
-    }
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
   }
-  
-  next();
 });
 
-export default mongoose.models.User || mongoose.model('User', UserSchema);
+// Method to compare password
+UserSchema.methods.comparePassword = async function (candidatePassword) {
+  try {
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    throw new Error(error);
+  }
+};
+
+// Check if user has an active subscription
+UserSchema.methods.hasActiveSubscription = function () {
+  return this.isSubscribed && 
+         (this.subscriptionStatus === 'active' || this.subscriptionStatus === 'trialing') &&
+         new Date(this.subscriptionEnd) > new Date();
+};
+
+// Prevents model compilation error in development due to hot reloading
+const User = mongoose.models.User || mongoose.model('User', UserSchema);
+
+export default User;

@@ -1,187 +1,195 @@
 // src/app/page.js
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, Search, Users, ShoppingBag, BookOpen } from 'lucide-react';
 
-export default function HomePage() {
+export default function Home() {
   return (
-    <div className="bg-white">
+    <div className="flex flex-col min-h-screen">
       {/* Hero Section */}
-      <div className="relative bg-emerald-700">
-        <div className="absolute inset-0">
-          <div className="absolute inset-0 bg-gradient-to-r from-emerald-800 to-emerald-600 mix-blend-multiply" />
-        </div>
-        <div className="relative max-w-7xl mx-auto py-24 px-4 sm:py-32 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl lg:text-6xl">
-            Welcome to HappyLife.Services
-          </h1>
-          <p className="mt-6 max-w-3xl text-xl text-emerald-100">
-            Your comprehensive platform for holistic wellness products and trusted providers.
-            Discover natural remedies, alternative therapies, and wellness experts all in one place.
-          </p>
-          <div className="mt-10 max-w-md w-full">
-            <div className="relative rounded-md shadow-lg">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                className="block w-full pl-10 pr-3 py-4 border border-transparent rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 text-base"
-                placeholder="Search for products, providers, or wellness topics..."
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center">
-                <button
-                  type="button"
-                  className="h-full px-4 text-white bg-emerald-500 hover:bg-emerald-600 rounded-r-md focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
-                >
-                  Search
-                </button>
+      <section className="bg-gradient-to-r from-blue-500 to-purple-600 text-white py-20">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row items-center justify-between">
+            <div className="md:w-1/2 mb-10 md:mb-0">
+              <h1 className="text-4xl md:text-6xl font-bold mb-4">
+                Find Health & Wellness Solutions
+              </h1>
+              <p className="text-xl mb-8">
+                Connect with trusted providers and discover holistic products for your well-being journey.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Link href="/search" className="bg-white text-blue-600 hover:bg-blue-50 px-6 py-3 rounded-lg font-medium text-center">
+                  Explore Services
+                </Link>
+                <Link href="/products" className="bg-transparent border-2 border-white hover:bg-white/10 px-6 py-3 rounded-lg font-medium text-center">
+                  Browse Products
+                </Link>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Features Section */}
-      <div className="py-16 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h2 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
-              Find everything you need for your wellness journey
-            </h2>
-            <p className="mt-4 max-w-2xl text-xl text-gray-500 mx-auto">
-              Discover natural remedies, wellness providers, and expert knowledge to support your holistic health.
-            </p>
-          </div>
-
-          <div className="mt-16 grid grid-cols-1 gap-8 md:grid-cols-3">
-            {/* Find Providers */}
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="p-6">
-                <div className="inline-flex items-center justify-center p-3 bg-emerald-100 rounded-md text-emerald-600">
-                  <Users className="h-6 w-6" />
-                </div>
-                <h3 className="mt-4 text-lg font-medium text-gray-900">Find Trusted Providers</h3>
-                <p className="mt-2 text-base text-gray-500">
-                  Connect with qualified practitioners, therapists, and wellness experts near you.
-                </p>
-                <div className="mt-6">
-                  <Link 
-                    href="/providers" 
-                    className="inline-flex items-center text-emerald-600 hover:text-emerald-500"
-                  >
-                    Explore providers
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            {/* Discover Products */}
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="p-6">
-                <div className="inline-flex items-center justify-center p-3 bg-emerald-100 rounded-md text-emerald-600">
-                  <ShoppingBag className="h-6 w-6" />
-                </div>
-                <h3 className="mt-4 text-lg font-medium text-gray-900">Discover Natural Products</h3>
-                <p className="mt-2 text-base text-gray-500">
-                  Browse a wide selection of supplements, remedies, and wellness products from trusted sources.
-                </p>
-                <div className="mt-6">
-                  <Link 
-                    href="/products" 
-                    className="inline-flex items-center text-emerald-600 hover:text-emerald-500"
-                  >
-                    Shop products
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            {/* Read Expert Blogs */}
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="p-6">
-                <div className="inline-flex items-center justify-center p-3 bg-emerald-100 rounded-md text-emerald-600">
-                  <BookOpen className="h-6 w-6" />
-                </div>
-                <h3 className="mt-4 text-lg font-medium text-gray-900">Read Expert Content</h3>
-                <p className="mt-2 text-base text-gray-500">
-                  Gain knowledge from wellness experts through informative blogs and articles.
-                </p>
-                <div className="mt-6">
-                  <Link 
-                    href="/blogs" 
-                    className="inline-flex items-center text-emerald-600 hover:text-emerald-500"
-                  >
-                    Read blogs
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
+            <div className="md:w-1/2">
+              <div className="bg-white p-6 rounded-lg shadow-xl">
+                <h2 className="text-gray-800 text-2xl font-semibold mb-4">Find What You Need</h2>
+                <div className="flex flex-col gap-4">
+                  <div>
+                    <label htmlFor="search" className="block text-gray-700 mb-2">What are you looking for?</label>
+                    <input
+                      type="text"
+                      id="search"
+                      placeholder="E.g., yoga, meditation, supplements..."
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="location" className="block text-gray-700 mb-2">Location</label>
+                    <input
+                      type="text"
+                      id="location"
+                      placeholder="City, state, or zip code"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800"
+                    />
+                  </div>
+                  <button className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium">
+                    Search
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Featured Categories */}
-      <div className="py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-extrabold text-gray-900">
-            Popular Wellness Categories
-          </h2>
-          <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {categories.map((category) => (
-              <Link 
-                key={category.name}
-                href={`/categories/${category.slug}`}
-                className="group"
-              >
-                <div className="relative h-40 w-full overflow-hidden rounded-lg bg-white group-hover:opacity-75">
-                  <div className="absolute inset-0 flex items-center justify-center bg-emerald-100 text-emerald-600">
-                    {category.icon}
-                  </div>
-                </div>
-                <h3 className="mt-2 text-sm text-gray-700">{category.name}</h3>
-              </Link>
+      <section className="py-16 bg-gray-50">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-12">Popular Categories</h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+            {[
+              { name: 'Acupuncture', icon: '🧠' },
+              { name: 'Yoga', icon: '🧘‍♀️' },
+              { name: 'Massage', icon: '💆‍♂️' },
+              { name: 'Nutrition', icon: '🥗' },
+              { name: 'Meditation', icon: '🧘‍♂️' },
+              { name: 'Supplements', icon: '💊' },
+            ].map((category, index) => (
+              <div key={index} className="bg-white rounded-xl shadow-md p-6 text-center hover:shadow-lg transition-shadow">
+                <div className="text-4xl mb-4">{category.icon}</div>
+                <h3 className="font-medium">{category.name}</h3>
+              </div>
             ))}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Subscription CTA */}
-      <div className="bg-emerald-700">
-        <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:py-16 lg:px-8 lg:flex lg:items-center lg:justify-between">
-          <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            <span className="block">Ready to join the wellness community?</span>
-            <span className="block text-emerald-300">Start listing your products or services today.</span>
-          </h2>
-          <div className="mt-8 flex lg:mt-0 lg:flex-shrink-0">
-            <div className="inline-flex rounded-md shadow">
-              <Link
-                href="/subscribe"
-                className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-base font-medium rounded-md text-emerald-700 bg-white hover:bg-gray-100"
-              >
-                Subscribe Now - $20/month
-              </Link>
+      {/* Featured Providers */}
+      <section className="py-16">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center mb-10">
+            <h2 className="text-3xl font-bold">Featured Providers</h2>
+            <Link href="/providers" className="text-blue-600 hover:text-blue-800 font-medium">
+              View All
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {/* Provider cards would be dynamically generated here */}
+            {[1, 2, 3].map((provider) => (
+              <div key={provider} className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+                <div className="h-48 bg-gray-200"></div>
+                <div className="p-6">
+                  <h3 className="text-xl font-semibold mb-2">Wellness Provider {provider}</h3>
+                  <p className="text-gray-600 mb-4">Specializing in holistic healing and natural therapies</p>
+                  <div className="flex items-center mb-4">
+                    <div className="flex text-yellow-400">
+                      {'★'.repeat(5)}
+                    </div>
+                    <span className="text-gray-600 ml-2">(42 reviews)</span>
+                  </div>
+                  <Link href={`/providers/${provider}`} className="text-blue-600 hover:text-blue-800 font-medium">
+                    View Profile
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Products */}
+      <section className="py-16 bg-gray-50">
+        <div className="container mx-auto px-4">
+          <div className="flex justify-between items-center mb-10">
+            <h2 className="text-3xl font-bold">Featured Products</h2>
+            <Link href="/products" className="text-blue-600 hover:text-blue-800 font-medium">
+              View All
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Product cards would be dynamically generated here */}
+            {[1, 2, 3, 4].map((product) => (
+              <div key={product} className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+                <div className="h-48 bg-gray-200"></div>
+                <div className="p-4">
+                  <h3 className="text-lg font-semibold mb-2">Natural Product {product}</h3>
+                  <p className="text-gray-600 text-sm mb-2">Premium quality wellness supplement</p>
+                  <div className="flex items-center mb-3">
+                    <div className="flex text-yellow-400 text-sm">
+                      {'★'.repeat(5)}
+                    </div>
+                    <span className="text-gray-600 text-xs ml-2">(28 reviews)</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold">$29.99</span>
+                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">
+                      View Details
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works */}
+      <section className="py-16">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-12">How It Works</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="text-center">
+              <div className="bg-blue-100 text-blue-600 rounded-full w-16 h-16 flex items-center justify-center text-2xl mx-auto mb-4">1</div>
+              <h3 className="text-xl font-semibold mb-2">Search</h3>
+              <p className="text-gray-600">Browse our extensive directory of wellness providers and products.</p>
+            </div>
+            <div className="text-center">
+              <div className="bg-purple-100 text-purple-600 rounded-full w-16 h-16 flex items-center justify-center text-2xl mx-auto mb-4">2</div>
+              <h3 className="text-xl font-semibold mb-2">Connect</h3>
+              <p className="text-gray-600">Read reviews, compare options, and connect with providers.</p>
+            </div>
+            <div className="text-center">
+              <div className="bg-green-100 text-green-600 rounded-full w-16 h-16 flex items-center justify-center text-2xl mx-auto mb-4">3</div>
+              <h3 className="text-xl font-semibold mb-2">Thrive</h3>
+              <p className="text-gray-600">Experience the benefits of holistic wellness solutions.</p>
             </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* Join as Provider CTA */}
+      <section className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-16">
+        <div className="container mx-auto px-4 text-center">
+          <h2 className="text-3xl font-bold mb-4">Are You a Wellness Provider or Seller?</h2>
+          <p className="text-xl mb-8 max-w-3xl mx-auto">
+            Join our platform to showcase your services or products to thousands of wellness seekers.
+            Get started for just $20/month!
+          </p>
+          <div className="flex justify-center gap-4">
+            <Link href="/auth/signup?role=provider" className="bg-white text-purple-600 hover:bg-purple-50 px-6 py-3 rounded-lg font-medium">
+              Join as Provider
+            </Link>
+            <Link href="/auth/signup?role=seller" className="bg-transparent border-2 border-white hover:bg-white/10 px-6 py-3 rounded-lg font-medium">
+              Join as Seller
+            </Link>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
-
-// Placeholder for category icons
-const categories = [
-  { name: 'Mind & Body', slug: 'mind-body', icon: <span className="text-2xl">🧘</span> },
-  { name: 'Nutrition', slug: 'nutrition', icon: <span className="text-2xl">🥗</span> },
-  { name: 'Alternative Medicine', slug: 'alternative-medicine', icon: <span className="text-2xl">🌿</span> },
-  { name: 'Fitness', slug: 'fitness', icon: <span className="text-2xl">💪</span> },
-  { name: 'Mental Health', slug: 'mental-health', icon: <span className="text-2xl">🧠</span> },
-  { name: 'Aromatherapy', slug: 'aromatherapy', icon: <span className="text-2xl">🌸</span> },
-  { name: 'Spiritual Wellness', slug: 'spiritual-wellness', icon: <span className="text-2xl">✨</span> },
-  { name: 'Sleep Health', slug: 'sleep-health', icon: <span className="text-2xl">😴</span> },
-  { name: 'Chronic Pain', slug: 'chronic-pain', icon: <span className="text-2xl">🤕</span> },
-  { name: 'Energy Healing', slug: 'energy-healing', icon: <span className="text-2xl">⚡</span> },
-];

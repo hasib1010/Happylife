@@ -1,47 +1,30 @@
 // src/app/api/auth/logout/route.js
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 
-/**
- * Handle user logout
- */
 export async function POST() {
   try {
-    const cookieStore = cookies();
-    
-    // Clear all authentication cookies
-    cookieStore.set('access_token', '', {
+    // Create a response
+    const response = NextResponse.json(
+      { success: true, message: 'Logout successful' },
+      { status: 200 }
+    );
+
+    // Clear the auth cookie
+    response.cookies.set({
+      name: 'auth_token',
+      value: '',
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 0,
-      path: '/'
+      expires: new Date(0), // Set expiration to the past
+      sameSite: 'strict',
+      path: '/',
     });
-    
-    cookieStore.set('refresh_token', '', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 0,
-      path: '/'
-    });
-    
-    cookieStore.set('user_info', '', {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 0,
-      path: '/'
-    });
-    
-    return NextResponse.json({
-      success: true,
-      message: 'Logged out successfully'
-    });
+
+    return response;
   } catch (error) {
     console.error('Logout error:', error);
     return NextResponse.json(
-      { success: false, message: error.message || 'Server error' },
+      { success: false, message: 'Server error' },
       { status: 500 }
     );
   }

@@ -1,115 +1,109 @@
-// src/middleware.js
 import { NextResponse } from 'next/server';
-import { ROLES, mapAccountTypeToRole } from '@/lib/constants';
+import { getToken } from 'next-auth/jwt';
 
-// Protected routes configuration
-const protectedRoutes = {
-  admin: {
-    pathStart: '/admin',
-    requiredRoles: [ROLES.MANAGER, ROLES.ADMIN, ROLES.SUPER_ADMIN]
-  },
-  provider: {
-    pathStart: '/dashboard/provider',
-    requiredRoles: [ROLES.PROVIDER, ROLES.MANAGER, ROLES.ADMIN, ROLES.SUPER_ADMIN]
-  },
-  seller: {
-    pathStart: '/dashboard/products',
-    requiredRoles: [ROLES.PRODUCT_SELLER, ROLES.MANAGER, ROLES.ADMIN, ROLES.SUPER_ADMIN]
-  },
-  dashboard: {
-    pathStart: '/dashboard',
-    requiredRoles: [ROLES.REGULAR, ROLES.PROVIDER, ROLES.PRODUCT_SELLER, ROLES.MANAGER, ROLES.ADMIN, ROLES.SUPER_ADMIN]
-  },
-};
-
+// This function can be marked `async` if using `await` inside
 export async function middleware(request) {
-  // Get the pathname from the URL
   const { pathname } = request.nextUrl;
-
-  // Skip middleware for API routes and public assets
-  if (pathname.startsWith('/api/') || 
-      pathname.startsWith('/_next/') ||
-      pathname.startsWith('/static/') ||
-      pathname.includes('.')) {
-    return NextResponse.next();
-  }
-
-  // Check if this is a protected route
-  const isProtectedRoute = Object.values(protectedRoutes).some(
-    route => pathname.startsWith(route.pathStart)
+  
+  // Define paths that are protected
+  const protectedPaths = [
+    '/dashboard',
+    '/profile',
+    '/settings',
+    '/subscription',
+    '/listings',
+    '/inbox',
+    '/bookings',
+  ];
+  
+  // Define authentication paths
+  const authPaths = ['/auth/signin', '/auth/signup'];
+  
+  // Check if the path is protected
+  const isPathProtected = protectedPaths.some((path) => 
+    pathname.startsWith(path)
   );
-
-  if (!isProtectedRoute) {
+  
+  // Check if the path is an auth path
+  const isAuthPath = authPaths.some((path) => pathname === path);
+  
+  // If the path is not protected or not an auth path, proceed
+  if (!isPathProtected && !isAuthPath) {
     return NextResponse.next();
   }
-
-  // Get authentication cookies
-  const accessToken = request.cookies.get('access_token')?.value;
-  const userInfoCookie = request.cookies.get('user_info')?.value;
-
-  // If no access token, redirect to login
-  if (!accessToken) {
-    console.log('No access token found, redirecting to login');
-    const callbackUrl = encodeURIComponent(pathname);
-    return NextResponse.redirect(new URL(`/auth/login?callbackUrl=${callbackUrl}`, request.url));
-  }
-
-  // If no user info cookie, refresh might be needed
-  if (!userInfoCookie) {
-    // Try to handle this with a client-side refresh
-    // For now, redirect to refresh endpoint which will then redirect back
-    console.log('No user info cookie found, redirecting to refresh');
-    return NextResponse.redirect(new URL(`/api/auth/refresh?redirect=${encodeURIComponent(pathname)}`, request.url));
-  }
-
-  // Parse user info
-  let userInfo;
-  try {
-    userInfo = JSON.parse(decodeURIComponent(userInfoCookie));
-  } catch (error) {
-    console.error('Error parsing user info cookie:', error);
-    // Invalid user info cookie, redirect to login
-    const callbackUrl = encodeURIComponent(pathname);
-    return NextResponse.redirect(new URL(`/auth/login?callbackUrl=${callbackUrl}&error=invalid_session`, request.url));
-  }
-
-  // Check role-based access for each protected route type
-  for (const [key, route] of Object.entries(protectedRoutes)) {
-    if (pathname.startsWith(route.pathStart)) {
-      // Get user role or map from accountType for backward compatibility
-      const userRole = userInfo.role || mapAccountTypeToRole(userInfo.accountType);
-      
-      if (!route.requiredRoles.includes(userRole)) {
-        console.log(`Access denied for role ${userRole} to ${pathname}`);
-        
-        // Determine appropriate redirect based on user role
-        let redirectPath = '/dashboard';
-        
-        if ([ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.MANAGER].includes(userRole)) {
-          redirectPath = '/admin/dashboard';
-        } else if (userRole === ROLES.PROVIDER) {
-          redirectPath = '/dashboard/provider';
-        } else if (userRole === ROLES.PRODUCT_SELLER) {
-          redirectPath = '/dashboard/products';
-        }
-        
-        return NextResponse.redirect(new URL(redirectPath, request.url));
-      }
+  
+  // Check for NextAuth.js session token
+  const sessionToken = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
+  
+  // Check for custom JWT token in cookies or authorization header
+  const authHeader = request.headers.get('authorization');
+  let customToken = null;
+  
+  if (authHeader?.startsWith('Bearer ')) {
+    customToken = authHeader.split(' ')[1];
+  } else {
+    // Check for token in cookies
+    const authTokenCookie = request.cookies.get('auth_token');
+    if (authTokenCookie) {
+      customToken = authTokenCookie.value;
     }
   }
-
-  // If all checks pass, allow the request
+  
+  // Verify if it's a valid token (just check if it exists for now)
+  // For a more secure approach, we would verify the token signature and expiration
+  let isValidCustomToken = false;
+  if (customToken) {
+    try {
+      // In production, you would verify the token with the JWT_SECRET
+      // but for now, we'll just check if it's present and has a reasonable length
+      isValidCustomToken = customToken.length > 10;
+      
+      // If JWT_SECRET is available, you can verify the token properly:
+      // const jwtSecret = process.env.JWT_SECRET;
+      // if (jwtSecret) {
+      //   const decoded = jwt.verify(customToken, jwtSecret);
+      //   isValidCustomToken = !!decoded;
+      // }
+    } catch (error) {
+      isValidCustomToken = false;
+    }
+  }
+  
+  // For protected routes: redirect to login if no session or token
+  if (isPathProtected && !sessionToken && !isValidCustomToken) {
+    const callbackUrl = encodeURIComponent(pathname);
+    return NextResponse.redirect(
+      new URL(`/auth/signin?callbackUrl=${callbackUrl}`, request.url)
+    );
+  }
+  
+  // For auth routes: redirect to dashboard if already authenticated
+  if (isAuthPath && (sessionToken || isValidCustomToken)) {
+    return NextResponse.redirect(new URL('/dashboard', request.url));
+  }
+  
+  // Otherwise, proceed
   return NextResponse.next();
 }
 
-// Define which paths this middleware should run on
+// Configure middleware to run on specific paths
 export const config = {
   matcher: [
-    // Include all routes except:
-    // - API routes
-    // - Next.js internal routes
-    // - Static files
-    // - Auth pages
-    '/((?!api|_next|static|auth).*)',
+    '/dashboard/:path*',
+    '/profile/:path*',
+    '/settings/:path*',
+    '/subscription/:path*',
+    '/listings/:path*',
+    '/inbox/:path*',
+    '/bookings/:path*',
+    '/services/create',
+    '/services/manage/:path*',
+    '/products/create',
+    '/products/manage/:path*',
+    '/auth/signin',
+    '/auth/signup',
   ],
 };

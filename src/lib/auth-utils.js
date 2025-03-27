@@ -1,55 +1,82 @@
 // src/lib/auth-utils.js
-import { connectToDatabase } from '@/lib/mongodb';
-import mongoose from 'mongoose';
+import { getSession } from 'next-auth/react';
+import jwt from 'jsonwebtoken';
+import { cookies } from 'next/headers';
 
-export async function getServerUser(request) {
+/**
+ * Utility to get the current user from either NextAuth or custom JWT
+ * 
+ * For client components, use:
+ * - useSession() from next-auth/react for NextAuth
+ * - useAuth() from our custom hook for custom JWT
+ * 
+ * This utility is for server components
+ */
+export async function getUser(req) {
   try {
-    // Extract session token from request headers if provided
-    let sessionToken = null;
+    // First try to get the session from NextAuth
+    const session = await getSession({ req });
     
-    // If request is provided, try to get the cookie from it
-    if (request && request.cookies) {
-      sessionToken = request.cookies.get('session_token')?.value;
+    if (session?.user) {
+      return session.user;
     }
     
-    // If no session token found, return null
-    if (!sessionToken) {
-      return null;
+    // If NextAuth session is not available, try our custom JWT
+    const cookieStore = cookies();
+    const token = cookieStore.get('auth_token')?.value;
+    
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, process.env.NEXTAUTH_SECRET);
+        return {
+          id: decoded.id,
+          name: decoded.name,
+          email: decoded.email,
+          role: decoded.role,
+          businessName: decoded.businessName,
+          isSubscribed: decoded.isSubscribed
+        };
+      } catch (error) {
+        console.error('Custom token verification failed:', error.message);
+        return null;
+      }
     }
     
-    await connectToDatabase();
-    
-    const User = mongoose.models.User || mongoose.model('User', new mongoose.Schema({
-      name: String,
-      email: String,
-      password: String,
-      sessionToken: String,
-      accountType: String,
-      subscriptionStatus: String,
-    }));
-    
-    const user = await User.findOne({ sessionToken });
-    return user;
+    return null;
   } catch (error) {
-    console.error('Error getting server user:', error);
+    console.error('Error getting user:', error);
     return null;
   }
 }
 
-// Middleware-like function to protect routes on the server
-export async function requireAuth() {
-  const user = await getServerUser();
+/**
+ * Check if user has the required role(s)
+ * @param {Object} user - User object
+ * @param {string|string[]} roles - Required role(s)
+ * @returns {boolean} - Whether user has the required role
+ */
+export function hasRequiredRole(user, roles) {
+  if (!user) return false;
   
-  if (!user) {
-    return {
-      redirect: {
-        destination: '/auth/signin',
-        permanent: false,
-      },
-    };
+  if (Array.isArray(roles)) {
+    return roles.includes(user.role);
   }
   
-  return {
-    props: { user },
-  };
+  return user.role === roles;
+}
+
+/**
+ * Check if a user has an active subscription
+ * @param {Object} user - User object
+ * @returns {boolean} - Whether user has an active subscription
+ */
+export function hasActiveSubscription(user) {
+  if (!user) return false;
+  
+  // If the user is not a provider or seller, they don't need a subscription
+  if (!['provider', 'seller'].includes(user.role)) {
+    return true;
+  }
+  
+  return user.isSubscribed === true;
 }

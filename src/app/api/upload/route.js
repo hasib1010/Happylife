@@ -1,68 +1,60 @@
 // src/app/api/upload/route.js
-import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../auth/[...nextauth]/route';
-import { uploadFileToS3, getKeyFromUrl, deleteFileFromS3 } from '@/lib/s3';
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { NextResponse } from "next/server";
+import { v4 as uuidv4 } from "uuid";
+
+// Initialize S3 client
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+});
 
 export async function POST(request) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session) {
-      return NextResponse.json(
-        { message: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Check if user has active subscription for certain file types
-    if (['provider', 'product', 'blog', 'certification'].includes(fileType) && 
-        session.user.subscriptionStatus !== 'active') {
-      return NextResponse.json(
-        { message: 'Active subscription required' },
-        { status: 403 }
-      );
-    }
-
-    // Access form data with formData()
     const formData = await request.formData();
-    const file = formData.get('file');
-    const fileType = formData.get('fileType') || 'general';
-    
+    const file = formData.get("file");
+    const folder = formData.get("folder") || "uploads";
+
     if (!file) {
       return NextResponse.json(
-        { message: 'No file provided' },
+        { error: "No file provided" },
         { status: 400 }
       );
     }
 
-    // Convert FormData file to buffer
+    // Get file data
     const buffer = Buffer.from(await file.arrayBuffer());
-    const filename = file.name;
-    const mimetype = file.type;
+    const fileExtension = file.name.split(".").pop();
+    const fileName = `${folder}/${uuidv4()}.${fileExtension}`;
+    const contentType = file.type;
 
-    // Create file object for S3 upload
-    const fileObject = {
-      buffer,
-      name: filename,
-      mimetype
+    // Set parameters for S3
+    const params = {
+      Bucket: process.env.AWS_S3_BUCKET_NAME,
+      Key: fileName,
+      Body: buffer,
+      ContentType: contentType,
+      // ACL parameter removed - use bucket policy for public access instead
     };
 
     // Upload to S3
-    const fileUrl = await uploadFileToS3(fileObject, session.user.id, fileType);
+    await s3Client.send(new PutObjectCommand(params));
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        url: fileUrl,
-        type: mimetype,
-        name: filename,
-      },
+    // Generate the URL for the uploaded file
+    const fileUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+
+    return NextResponse.json({ 
+      success: true, 
+      fileUrl,
+      message: "File uploaded successfully" 
     });
   } catch (error) {
-    console.error('Error uploading file:', error);
+    console.error("Error uploading file:", error);
     return NextResponse.json(
-      { message: 'File upload failed' },
+      { error: "Failed to upload file" },
       { status: 500 }
     );
   }
