@@ -108,6 +108,8 @@ const ProductSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
+    toJSON: { virtuals: true },  // This ensures virtuals are included in JSON output
+    toObject: { virtuals: true } // This ensures virtuals are included when converting to objects
   }
 );
 
@@ -145,7 +147,7 @@ ProductSchema.virtual('discountPercentage').get(function() {
 ProductSchema.pre(/^find/, function(next) {
   this.populate({
     path: 'seller',
-    select: 'name profilePicture businessName',
+    select: 'name email profilePicture businessName role' // Include any additional fields you need
   });
   next();
 });

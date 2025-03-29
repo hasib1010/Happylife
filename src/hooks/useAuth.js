@@ -3,7 +3,7 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 
-// Create the auth context
+// Create auth context
 const AuthContext = createContext();
 
 // Auth provider component
@@ -12,22 +12,27 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Check if the user is logged in on initial load
+  // Load user from localStorage on initial render (client-side only)
   useEffect(() => {
-    async function loadUserFromLocalStorage() {
+    const loadUser = () => {
       try {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
+        if (typeof window !== 'undefined') {
+          const storedUser = localStorage.getItem('user');
+          if (storedUser) {
+            setUser(JSON.parse(storedUser));
+          }
         }
       } catch (error) {
-        console.error('Failed to load user from localStorage:', error);
+        console.error('Failed to load user:', error);
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('user');
+        }
       } finally {
         setLoading(false);
       }
-    }
+    };
 
-    loadUserFromLocalStorage();
+    loadUser();
   }, []);
 
   // Login function
@@ -45,18 +50,18 @@ export function AuthProvider({ children }) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'Authentication failed');
+        throw new Error(data.message || 'Login failed');
       }
 
-      // Save user to state and localStorage
       setUser(data.user);
-      localStorage.setItem('user', JSON.stringify(data.user));
-      
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user', JSON.stringify(data.user));
+      }
       return { success: true };
     } catch (error) {
       return {
         success: false,
-        error: error.message || 'Authentication failed',
+        error: error.message || 'Login failed',
       };
     } finally {
       setLoading(false);
@@ -66,34 +71,28 @@ export function AuthProvider({ children }) {
   // Logout function
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-      });
-
-      // Clear user from state and localStorage
+      await fetch('/api/auth/logout', { method: 'POST' });
       setUser(null);
-      localStorage.removeItem('user');
-      
-      // Redirect to home/login page
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('user');
+      }
       router.push('/auth/signin');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Logout failed:', error);
     }
   };
 
-  // Get current auth state
-  const isAuthenticated = !!user;
-
-  // Check if user has a specific role
+  // Check if user has specific role(s)
   const hasRole = (role) => {
-    if (!user) return false;
-    
+    if (!user?.role) return false;
     if (Array.isArray(role)) {
       return role.includes(user.role);
     }
-    
     return user.role === role;
   };
+
+  // Check authentication status
+  const isAuthenticated = !!user;
 
   return (
     <AuthContext.Provider
@@ -102,8 +101,8 @@ export function AuthProvider({ children }) {
         loading,
         login,
         logout,
-        isAuthenticated,
         hasRole,
+        isAuthenticated,
       }}
     >
       {children}
@@ -111,7 +110,7 @@ export function AuthProvider({ children }) {
   );
 }
 
-// Hook to use the auth context
+// Custom hook to use auth context
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -120,36 +119,45 @@ export function useAuth() {
   return context;
 }
 
-// Create a higher-order component for protected routes
-export function withAuth(Component, roles = null) {
+// Higher-order component for protected routes
+export function withAuth(Component, requiredRoles) {
   return function ProtectedRoute(props) {
     const { user, loading, isAuthenticated, hasRole } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-      if (!loading && !isAuthenticated) {
-        router.push('/auth/signin');
-      } else if (roles && !loading && isAuthenticated && !hasRole(roles)) {
-        router.push('/dashboard');
+      if (!loading) {
+        if (!isAuthenticated) {
+          router.push('/auth/signin');
+        } else if (requiredRoles && !hasRole(requiredRoles)) {
+          router.push('/unauthorized');
+        }
       }
-    }, [loading, isAuthenticated, router]);
+    }, [loading, isAuthenticated, router, requiredRoles]);
 
     if (loading) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-green-50">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-600"></div>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
         </div>
       );
     }
 
-    if (!isAuthenticated) {
-      return null;
-    }
-
-    if (roles && !hasRole(roles)) {
-      return null;
+    if (!isAuthenticated || (requiredRoles && !hasRole(requiredRoles))) {
+      return null; // Redirect will happen in useEffect
     }
 
     return <Component {...props} />;
   };
+}
+
+// Client-side only wrapper
+export function ClientOnly({ children }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return mounted ? children : null;
 }

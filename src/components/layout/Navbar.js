@@ -63,6 +63,10 @@ export default function Navbar() {
   };
 
   const isPremiumUser = session?.user?.role === 'provider' || session?.user?.role === 'seller';
+  const isAdmin = session?.user?.role === 'admin';
+  
+  // Determine the dashboard URL based on user role
+  const dashboardUrl = isAdmin ? '/admin/dashboard' : '/dashboard';
 
   return (
     <nav
@@ -101,14 +105,14 @@ export default function Navbar() {
               Products
             </Link>
             <Link
-              href="/providers"
+              href="/blogs"
               className={`px-3 py-2 rounded-md text-sm font-medium ${
-                pathname === '/providers'
+                pathname === '/blogs'
                   ? 'text-blue-600 bg-blue-50'
                   : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
               }`}
             >
-              Providers
+              Blogs
             </Link>
             <Link
               href="/about"
@@ -145,10 +149,10 @@ export default function Navbar() {
                 {isProfileDropdownOpen && (
                   <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5">
                     <Link
-                      href="/dashboard"
+                      href={dashboardUrl}
                       className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
-                      Dashboard
+                      {isAdmin ? 'Admin Dashboard' : 'Dashboard'}
                     </Link>
                     <Link
                       href="/profile"
@@ -156,6 +160,7 @@ export default function Navbar() {
                     >
                       Profile
                     </Link>
+                     
                     {isPremiumUser && (
                       <>
                         <Link
@@ -254,14 +259,14 @@ export default function Navbar() {
               Products
             </Link>
             <Link
-              href="/providers"
+              href="/blogs"
               className={`block px-3 py-2 rounded-md text-base font-medium ${
-                pathname === '/providers'
+                pathname === '/blogs'
                   ? 'text-blue-600 bg-blue-50'
                   : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
               }`}
             >
-              Providers
+              Blogs
             </Link>
             <Link
               href="/about"
@@ -296,10 +301,10 @@ export default function Navbar() {
                 </div>
                 <div className="mt-3 space-y-1 px-2">
                   <Link
-                    href="/dashboard"
+                    href={dashboardUrl}
                     className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50"
                   >
-                    Dashboard
+                    {isAdmin ? 'Admin Dashboard' : 'Dashboard'}
                   </Link>
                   <Link
                     href="/profile"
@@ -307,16 +312,38 @@ export default function Navbar() {
                   >
                     Profile
                   </Link>
+                  {isAdmin && (
+                    <>
+                      <Link
+                        href="/admin/dashboard/products"
+                        className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50"
+                      >
+                        Manage Products
+                      </Link>
+                      <Link
+                        href="/admin/dashboard/services"
+                        className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50"
+                      >
+                        Manage Services
+                      </Link>
+                      <Link
+                        href="/admin/dashboard/users"
+                        className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50"
+                      >
+                        Manage Users
+                      </Link>
+                    </>
+                  )}
                   {isPremiumUser && (
                     <>
                       <Link
-                        href={session.user.role === 'provider' ? '/services/manage' : '/products/manage'}
+                        href={session.user.role === 'provider' ? '/dashboard/services' : '/dashboard/products'}
                         className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50"
                       >
                         {session.user.role === 'provider' ? 'Manage Services' : 'Manage Products'}
                       </Link>
                       <Link
-                        href="/subscription"
+                        href="/subscription/manage"
                         className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50"
                       >
                         Subscription

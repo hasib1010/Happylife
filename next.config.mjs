@@ -5,7 +5,12 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'happylife.service.s3.ap-southeast-2.amazonaws.com',
-        pathname: '/products/**',
+        pathname: '/**', // Accept ALL images from this hostname
+      },
+      {
+        protocol: 'https',
+        hostname: 's3.ap-southeast-2.amazonaws.com',
+        pathname: '/**', // Accept ALL images from this hostname
       },
     ],
   },

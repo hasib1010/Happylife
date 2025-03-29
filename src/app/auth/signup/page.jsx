@@ -1,11 +1,12 @@
 'use client';
 // src/app/auth/signup/page.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/auth/AuthProvider';
 import Link from 'next/link';
 
-export default function SignUp() {
+// Content component that uses searchParams
+function SignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { signup, user, loading, isAuthenticated } = useAuth();
@@ -548,5 +549,40 @@ export default function SignUp() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Loading fallback component
+function SignUpLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-blue-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="flex justify-center">
+          <div className="h-20 w-20 bg-gradient-to-r from-teal-500 to-green-500 rounded-full flex items-center justify-center shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-white animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </div>
+        </div>
+        <h1 className="mt-3 text-center text-2xl font-bold text-teal-800">
+          happylife.services
+        </h1>
+        <h2 className="mt-2 text-center text-3xl font-extrabold text-gray-900">
+          Loading...
+        </h2>
+        <div className="mt-6 flex justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-600"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function SignUp() {
+  return (
+    <Suspense fallback={<SignUpLoading />}>
+      <SignUpContent />
+    </Suspense>
   );
 }

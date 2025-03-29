@@ -7,8 +7,9 @@ const SubscriptionContext = createContext();
 
 export function SubscriptionProvider({ children }) {
   const { data: session } = useSession();
-  const [subscription, setSubscription] = useState(null);
+  const [subscriptionData, setSubscriptionData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     // Only fetch subscription data if user is logged in
@@ -21,31 +22,27 @@ export function SubscriptionProvider({ children }) {
 
   const fetchSubscriptionData = async () => {
     try {
+      setLoading(true);
       const response = await fetch('/api/subscription/status');
-      if (response.ok) {
-        const data = await response.json();
-        setSubscription(data.subscription);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch subscription status');
       }
-    } catch (error) {
-      console.error('Error fetching subscription data:', error);
+      
+      const data = await response.json();
+      setSubscriptionData(data);
+    } catch (err) {
+      console.error('Error fetching subscription data:', err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Check if user has an active subscription
+  // Check if user has an active subscription using the same logic as the API
   const hasActiveSubscription = () => {
-    if (!subscription) return false;
-    
-    // Check if the user has an active subscription status
-    const isActive = ['active', 'trialing'].includes(subscription.status);
-    
-    // Check if the subscription is still valid (not expired)
-    const isValid = subscription.currentPeriodEnd 
-      ? new Date(subscription.currentPeriodEnd) > new Date() 
-      : false;
-      
-    return isActive && isValid;
+    if (!subscriptionData) return false;
+    return subscriptionData.isActive === true;
   };
 
   // Refresh subscription data (useful after payment)
@@ -55,8 +52,12 @@ export function SubscriptionProvider({ children }) {
   };
 
   const value = {
-    subscription,
+    subscriptionData,
+    subscription: subscriptionData?.subscription,
+    user: subscriptionData?.user,
+    isActive: subscriptionData?.isActive,
     loading,
+    error,
     hasActiveSubscription,
     refreshSubscription,
   };

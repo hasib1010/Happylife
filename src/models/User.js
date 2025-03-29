@@ -87,6 +87,9 @@ const UserSchema = new mongoose.Schema(
     },
     subscriptionStart: Date,
     subscriptionEnd: Date,
+    // Password reset fields
+    resetPasswordToken: String,
+    resetPasswordExpires: Date,
     // Account status
     isVerified: {
       type: Boolean,
@@ -99,6 +102,8 @@ const UserSchema = new mongoose.Schema(
   },
   {
     timestamps: true, // Adds createdAt and updatedAt
+    toJSON: { virtuals: true },  // Include virtuals when converting to JSON
+    toObject: { virtuals: true } // Include virtuals when converting to objects
   }
 );
 
@@ -129,6 +134,24 @@ UserSchema.methods.hasActiveSubscription = function () {
   return this.isSubscribed && 
          (this.subscriptionStatus === 'active' || this.subscriptionStatus === 'trialing') &&
          new Date(this.subscriptionEnd) > new Date();
+};
+
+// Add virtual fields for products and services
+UserSchema.virtual('products', {
+  ref: 'Product',
+  localField: '_id',
+  foreignField: 'sellerId',
+});
+
+UserSchema.virtual('services', {
+  ref: 'Service',
+  localField: '_id',
+  foreignField: 'providerId',
+});
+
+// Method to get display name (either business name or personal name)
+UserSchema.methods.getDisplayName = function() {
+  return this.businessName || this.name;
 };
 
 // Prevents model compilation error in development due to hot reloading

@@ -1,11 +1,12 @@
 'use client';
 // src/app/blogs/page.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { format } from 'date-fns';
 
-export default function BlogsListPage() {
+// Content component that uses searchParams
+function BlogsListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const category = searchParams.get('category');
@@ -30,7 +31,7 @@ export default function BlogsListPage() {
   const fetchBlogs = async () => {
     try {
       setLoading(true);
-      
+
       // Build query string
       const queryParams = new URLSearchParams();
       if (category) queryParams.set('category', category);
@@ -38,13 +39,13 @@ export default function BlogsListPage() {
       if (query) queryParams.set('query', query);
       queryParams.set('page', pageNumber.toString());
       queryParams.set('limit', '12');
-      
+
       const response = await fetch(`/api/blogs?${queryParams.toString()}`);
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch blogs');
       }
-      
+
       const data = await response.json();
       setBlogs(data.blogs);
       setPagination(data.pagination);
@@ -60,12 +61,12 @@ export default function BlogsListPage() {
     e.preventDefault();
     const formData = new FormData(e.target);
     const searchQuery = formData.get('search');
-    
+
     const params = new URLSearchParams();
     if (searchQuery) params.set('query', searchQuery);
     if (category) params.set('category', category);
     if (tag) params.set('tag', tag);
-    
+
     router.push(`/blogs?${params.toString()}`);
   };
 
@@ -103,8 +104,8 @@ export default function BlogsListPage() {
             </div>
           </div>
         </div>
-        <button 
-          onClick={fetchBlogs} 
+        <button
+          onClick={fetchBlogs}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
         >
           Try Again
@@ -141,7 +142,7 @@ export default function BlogsListPage() {
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               />
             </div>
-            <button 
+            <button
               type="submit"
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
@@ -156,7 +157,7 @@ export default function BlogsListPage() {
             <div className="flex items-center flex-wrap gap-2">
               <h3 className="text-sm font-medium text-gray-700">Active filters:</h3>
               {activeFilters.map((filter, index) => (
-                <span 
+                <span
                   key={index}
                   className="inline-flex rounded-md items-center py-0.5 pl-2.5 pr-1 text-sm font-medium bg-blue-100 text-blue-800"
                 >
@@ -211,8 +212,8 @@ export default function BlogsListPage() {
             </svg>
             <h3 className="mt-2 text-lg font-medium text-gray-900">No blogs found</h3>
             <p className="mt-1 text-sm text-gray-500">
-              {activeFilters.length > 0 
-                ? 'Try adjusting your search or filter criteria.' 
+              {activeFilters.length > 0
+                ? 'Try adjusting your search or filter criteria.'
                 : 'Check back later for new content.'}
             </p>
           </div>
@@ -225,11 +226,14 @@ export default function BlogsListPage() {
               {/* Featured image */}
               <div className="h-48 bg-gray-200 group-hover:opacity-75 transition-opacity">
                 {blog.featuredImage ? (
-                  <img
-                    src={blog.featuredImage}
-                    alt={blog.title}
-                    className="w-full h-full object-cover"
-                  />
+                  <Link href={`/blogs/${blog._id}`} className=" ">
+                    <img
+                      src={blog.featuredImage}
+                      alt={blog.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </Link>
+
                 ) : (
                   <div className="w-full h-full bg-gradient-to-r from-blue-100 to-blue-200 flex items-center justify-center">
                     <svg className="h-12 w-12 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -238,12 +242,12 @@ export default function BlogsListPage() {
                   </div>
                 )}
               </div>
-              
+
               <div className="p-6">
                 {/* Category */}
                 {blog.category && (
                   <div className="mb-2">
-                    <Link 
+                    <Link
                       href={`/blogs?category=${encodeURIComponent(blog.category)}`}
                       className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 hover:bg-blue-200"
                     >
@@ -251,7 +255,7 @@ export default function BlogsListPage() {
                     </Link>
                   </div>
                 )}
-                
+
                 {/* Title and link */}
                 <Link href={`/blogs/${blog._id}`} className="block mt-2">
                   <h3 className="text-xl font-semibold text-gray-900 group-hover:text-blue-600">
@@ -261,15 +265,15 @@ export default function BlogsListPage() {
                     {blog.summary || blog.content.replace(/<[^>]*>?/gm, '').substring(0, 150) + '...'}
                   </p>
                 </Link>
-                
+
                 {/* Meta info */}
                 <div className="mt-6 flex items-center">
                   <div className="flex-shrink-0">
                     {blog.author?.profilePicture ? (
-                      <img 
-                        className="h-10 w-10 rounded-full object-cover" 
-                        src={blog.author.profilePicture} 
-                        alt={blog.author.name} 
+                      <img
+                        className="h-10 w-10 rounded-full object-cover"
+                        src={blog.author.profilePicture}
+                        alt={blog.author.name}
                       />
                     ) : (
                       <div className="h-10 w-10 rounded-full bg-blue-500 flex items-center justify-center text-white">
@@ -302,17 +306,16 @@ export default function BlogsListPage() {
               <button
                 onClick={() => navigateToPage(pagination.page - 1)}
                 disabled={pagination.page === 1}
-                className={`inline-flex items-center border-t-2 border-transparent pr-1 pt-4 text-sm font-medium ${
-                  pagination.page === 1 
-                    ? 'cursor-not-allowed text-gray-300' 
+                className={`inline-flex items-center border-t-2 border-transparent pr-1 pt-4 text-sm font-medium ${pagination.page === 1
+                    ? 'cursor-not-allowed text-gray-300'
                     : 'text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
+                  }`}
               >
-                <svg 
-                  className="mr-3 h-5 w-5" 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  viewBox="0 0 20 20" 
-                  fill="currentColor" 
+                <svg
+                  className="mr-3 h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
                   aria-hidden="true"
                 >
                   <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -324,17 +327,16 @@ export default function BlogsListPage() {
               {Array.from({ length: pagination.pages }).map((_, i) => {
                 const pageNum = i + 1;
                 const isCurrentPage = pageNum === pagination.page;
-                
+
                 return (
                   <button
                     key={i}
                     onClick={() => navigateToPage(pageNum)}
                     disabled={isCurrentPage}
-                    className={`inline-flex items-center border-t-2 px-4 pt-4 text-sm font-medium ${
-                      isCurrentPage
+                    className={`inline-flex items-center border-t-2 px-4 pt-4 text-sm font-medium ${isCurrentPage
                         ? 'border-blue-500 text-blue-600'
                         : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                    }`}
+                      }`}
                   >
                     {pageNum}
                   </button>
@@ -345,18 +347,17 @@ export default function BlogsListPage() {
               <button
                 onClick={() => navigateToPage(pagination.page + 1)}
                 disabled={pagination.page === pagination.pages}
-                className={`inline-flex items-center border-t-2 border-transparent pl-1 pt-4 text-sm font-medium ${
-                  pagination.page === pagination.pages 
-                    ? 'cursor-not-allowed text-gray-300' 
+                className={`inline-flex items-center border-t-2 border-transparent pl-1 pt-4 text-sm font-medium ${pagination.page === pagination.pages
+                    ? 'cursor-not-allowed text-gray-300'
                     : 'text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
+                  }`}
               >
                 Next
-                <svg 
-                  className="ml-3 h-5 w-5" 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  viewBox="0 0 20 20" 
-                  fill="currentColor" 
+                <svg
+                  className="ml-3 h-5 w-5"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
                   aria-hidden="true"
                 >
                   <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
@@ -367,5 +368,28 @@ export default function BlogsListPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Loading fallback component
+function BlogsListLoading() {
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-16 h-16 border-t-4 border-b-4 border-blue-500 rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading blogs...</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function BlogsListPage() {
+  return (
+    <Suspense fallback={<BlogsListLoading />}>
+      <BlogsListContent />
+    </Suspense>
   );
 }

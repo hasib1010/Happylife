@@ -10,10 +10,17 @@ import toast from 'react-hot-toast';
 export default function SubscriptionPage() {
   const router = useRouter();
   const { user, loading: authLoading, isAuthenticated, hasRole } = useAuth();
-  const { isLoading: subLoading, isSubscribed, subscription, refreshSubscription } = useSubscription();
+  const { 
+    loading: subLoading, 
+    subscriptionData, 
+    refreshSubscription 
+  } = useSubscription();
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
+  
+  // Check if subscription is active based on the subscription context data
+  const isSubscribed = subscriptionData?.isActive === true;
 
   // Check authentication and redirect if necessary
   useEffect(() => {
@@ -58,6 +65,12 @@ export default function SubscriptionPage() {
     }
   };
 
+  // Format date helper
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
+  };
+
   // Show loading state while auth or subscription data is loading
   if (authLoading || subLoading) {
     return (
@@ -72,14 +85,17 @@ export default function SubscriptionPage() {
     return null;
   }
 
+  // Get role from user or subscription data
+  const userRole = user?.role || subscriptionData?.user?.role || 'provider';
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         <div className="text-center mb-12">
           <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
             {isSubscribed
-              ? `Your ${user.role === 'provider' ? 'Provider' : 'Seller'} Subscription`
-              : `Join our directory as a ${user.role === 'provider' ? 'Provider' : 'Seller'}`}
+              ? `Your ${userRole === 'provider' ? 'Provider' : 'Seller'} Subscription`
+              : `Join our directory as a ${userRole === 'provider' ? 'Provider' : 'Seller'}`}
           </h1>
           <p className="mt-4 text-xl text-gray-600">
             {isSubscribed
@@ -105,7 +121,7 @@ export default function SubscriptionPage() {
                 </div>
                 <p className="mt-5 text-gray-500">
                   Everything you need to showcase your{' '}
-                  {user.role === 'provider' ? 'services' : 'products'} to potential clients.
+                  {userRole === 'provider' ? 'services' : 'products'} to potential clients.
                 </p>
 
                 <div className="mt-8">
@@ -153,7 +169,7 @@ export default function SubscriptionPage() {
                       />
                     </svg>
                     <p className="ml-3 text-gray-700">
-                      Multiple {user.role === 'provider' ? 'service' : 'product'} listings
+                      Multiple {userRole === 'provider' ? 'service' : 'product'} listings
                     </p>
                   </div>
                   <div className="flex items-center mt-4">
@@ -209,11 +225,20 @@ export default function SubscriptionPage() {
               <>
                 <h2 className="text-2xl font-bold text-gray-900">Subscription Details</h2>
                 <div className="mt-4 text-teal-600">
-                  <p className="text-lg font-medium">Status: Active</p>
-                  <p className="text-lg mt-2">Next billing: N/A</p>
+                  <div className="flex items-center">
+                    <p className="text-lg font-medium">Status:</p>
+                    <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      {subscriptionData?.user?.subscriptionStatus?.charAt(0)?.toUpperCase() + 
+                       subscriptionData?.user?.subscriptionStatus?.slice(1) || 'Active'}
+                    </span>
+                  </div>
+                  <p className="text-lg mt-2">
+                    Next billing: {formatDate(subscriptionData?.user?.subscriptionEnd)}
+                  </p>
                 </div>
                 <p className="mt-5 text-gray-500">
-                  Thank you for being a {user.role === 'provider' ? 'provider' : 'seller'} on HappyLife Services! Your subscription is active, and you can manage your listings from your dashboard.
+                  Thank you for being a {userRole === 'provider' ? 'provider' : 'seller'} on HappyLife Services! 
+                  Your subscription is active, and you can manage your listings from your dashboard.
                 </p>
 
                 <div className="mt-8 space-y-4">
@@ -224,10 +249,10 @@ export default function SubscriptionPage() {
                     Manage Listings
                   </Link>
                   <Link
-                    href="/subscription/cancel"
-                    className="w-full block bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 px-4 rounded-md font-medium text-center"
+                    href="/subscription/manage"
+                    className="w-full block bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-md font-medium text-center"
                   >
-                    Cancel Subscription
+                    Manage Subscription
                   </Link>
                 </div>
               </>
@@ -246,7 +271,7 @@ export default function SubscriptionPage() {
               </Link>
               .{' '}
               {isSubscribed
-                ? 'You can cancel anytime from this page.'
+                ? 'You can manage your subscription details from the manage subscription page.'
                 : 'You can cancel anytime from your account settings.'}
             </p>
           </div>
@@ -260,14 +285,14 @@ export default function SubscriptionPage() {
               <div className="pt-6">
                 <dt className="text-base font-medium text-gray-900">What happens after I subscribe?</dt>
                 <dd className="mt-2 text-base text-gray-500">
-                  After subscribing, you’ll be able to create your profile and add your{' '}
-                  {user.role === 'provider' ? 'services' : 'products'} to our directory immediately.
+                  After subscribing, you'll be able to create your profile and add your{' '}
+                  {userRole === 'provider' ? 'services' : 'products'} to our directory immediately.
                 </dd>
               </div>
               <div className="pt-6">
                 <dt className="text-base font-medium text-gray-900">Can I cancel my subscription?</dt>
                 <dd className="mt-2 text-base text-gray-500">
-                  Yes, you can cancel your subscription at any time from this page after subscribing.
+                  Yes, you can cancel your subscription at any time from the subscription management page after subscribing.
                 </dd>
               </div>
               <div className="pt-6">

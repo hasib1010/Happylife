@@ -1,15 +1,17 @@
 'use client';
 // src/app/services/page.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
-export default function DirectoryPage() {
+// Content component that uses searchParams
+function DirectoryPageContent() {
   const [listings, setListings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [featuredCount, setFeaturedCount] = useState(0);
   
   const searchParams = useSearchParams();
   
@@ -54,6 +56,20 @@ export default function DirectoryPage() {
           const uniqueCategories = [...new Set(data.services.map(service => service.category))];
           setCategories(uniqueCategories);
         }
+
+        // Calculate featured count if provided or from services
+        if (data.filters && data.filters.featuredCount !== undefined) {
+          setFeaturedCount(data.filters.featuredCount);
+        } else {
+          // Count featured listings manually
+          const featuredServices = data.services ? 
+            data.services.filter(service => 
+              service.isFeatured && 
+              service.featureExpiration && 
+              new Date(service.featureExpiration) > new Date()
+            ) : [];
+          setFeaturedCount(featuredServices.length);
+        }
       } catch (error) {
         console.error('Error fetching directory listings:', error);
         setError(error.message || 'An error occurred while fetching directory listings');
@@ -69,6 +85,17 @@ export default function DirectoryPage() {
   const handleCategoryChange = (category) => {
     setSelectedCategory(category);
   };
+
+  // Check if a service is featured with a valid expiration date
+  const isServiceFeatured = (service) => {
+    return service.isFeatured && 
+           service.featureExpiration && 
+           new Date(service.featureExpiration) > new Date();
+  };
+  
+  // Get featured and non-featured services
+  const featuredServices = listings.filter(isServiceFeatured);
+  const regularServices = listings.filter(service => !isServiceFeatured(service));
   
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -140,12 +167,67 @@ export default function DirectoryPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {listings.map(listing => (
-              <ListingCard key={listing.id || listing._id} listing={listing} />
-            ))}
-          </div>
+          <>
+            {/* Featured Listings Section */}
+            {featuredServices.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5 text-yellow-500 mr-2">
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                  <h2 className="text-xl font-bold">Featured Businesses</h2>
+                </div>
+                
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {featuredServices.map(listing => (
+                    <ListingCard key={`featured-${listing.id || listing._id}`} listing={listing} />
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Regular Listings Section */}
+            {regularServices.length > 0 && (
+              <>
+                {/* Add a heading to separate regular listings if there are featured ones */}
+                {featuredServices.length > 0 && (
+                  <div className="mb-4 mt-8">
+                    <h2 className="text-xl font-bold">All Businesses</h2>
+                    <div className="h-0.5 bg-gray-200 mt-2"></div>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                  {regularServices.map(listing => (
+                    <ListingCard key={listing.id || listing._id} listing={listing} />
+                  ))}
+                </div>
+              </>
+            )}
+          </>
         )}
+      </div>
+    </div>
+  );
+}
+
+// Loading fallback component
+function DirectoryLoading() {
+  return (
+    <div className="bg-gray-50 min-h-screen">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center mb-12">
+          <h1 className="text-3xl font-extrabold text-gray-900 sm:text-4xl">
+            Business Directory
+          </h1>
+          <p className="mt-3 max-w-2xl mx-auto text-xl text-gray-500 sm:mt-4">
+            Find the perfect business for your needs
+          </p>
+        </div>
+        
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        </div>
       </div>
     </div>
   );
@@ -167,7 +249,7 @@ function ListingCard({ listing }) {
   
   return (
     <div className={`bg-white rounded-lg shadow-md overflow-hidden transition-all hover:shadow-lg ${
-      isFeatured ? 'ring-2 ring-yellow-400' : ''
+      isFeatured ? 'ring-2 ring-yellow-400 bg-gradient-to-b from-yellow-50 to-white' : ''
     }`}>
       <div className="relative">
         {/* Business image */}
@@ -275,5 +357,14 @@ function ListingCard({ listing }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function DirectoryPage() {
+  return (
+    <Suspense fallback={<DirectoryLoading />}>
+      <DirectoryPageContent />
+    </Suspense>
   );
 }

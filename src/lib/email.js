@@ -3,15 +3,19 @@ import nodemailer from 'nodemailer';
 
 export async function sendEmail({ to, subject, html }) {
   try {
-    // Create a transporter
+    // Create a transporter for Microsoft 365/Outlook
     const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_SERVER_HOST,
-      port: process.env.EMAIL_SERVER_PORT,
+      host: 'smtp.office365.com',
+      port: 587,
+      secure: false, // true for 465, false for 587
       auth: {
-        user: process.env.EMAIL_SERVER_USER,
-        pass: process.env.EMAIL_SERVER_PASSWORD,
+        user: process.env.EMAIL_SERVER_USER,    // your-email@happylife.services
+        pass: process.env.EMAIL_SERVER_PASSWORD, // your Microsoft 365 email password
       },
-      secure: process.env.EMAIL_SERVER_SECURE === 'true',
+      tls: {
+        ciphers: 'SSLv3',
+        rejectUnauthorized: true
+      }
     });
 
     // Send email

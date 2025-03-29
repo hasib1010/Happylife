@@ -1,11 +1,11 @@
 'use client';
 // src/app/subscription/success/page.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 
-export default function SubscriptionSuccessPage() {
+function SubscriptionSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session, status } = useSession();
@@ -103,7 +103,7 @@ export default function SubscriptionSuccessPage() {
             Thank you for subscribing to HappyLife.Services. Your account is now active.
           </p>
         </div>
-        
+
         <div className="mt-8 bg-white py-8 px-4 shadow rounded-lg sm:px-10">
           <h3 className="text-lg leading-6 font-medium text-gray-900">Next Steps</h3>
           <div className="mt-6 border-t border-gray-200 pt-6">
@@ -120,7 +120,7 @@ export default function SubscriptionSuccessPage() {
                 </p>
               </div>
             </div>
-            
+
             <div className="mt-6 flex">
               <div className="flex-shrink-0">
                 <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-500 text-white">
@@ -136,7 +136,7 @@ export default function SubscriptionSuccessPage() {
                 </p>
               </div>
             </div>
-            
+
             <div className="mt-6 flex">
               <div className="flex-shrink-0">
                 <div className="flex items-center justify-center h-8 w-8 rounded-md bg-blue-500 text-white">
@@ -152,7 +152,7 @@ export default function SubscriptionSuccessPage() {
             </div>
           </div>
         </div>
-        
+
         <div className="mt-8 flex justify-center space-x-4">
           <Link
             href="/profile"
@@ -161,7 +161,7 @@ export default function SubscriptionSuccessPage() {
             Complete Profile
           </Link>
           <Link
-            href={session?.user?.role === 'provider' ? '/services/manage' : '/products/manage'}
+            href={session?.user?.role === 'provider' ? '/dashboard/services' : '/dashboard/products'}
             className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             {session?.user?.role === 'provider' ? 'Add Services' : 'Add Products'}
@@ -169,5 +169,13 @@ export default function SubscriptionSuccessPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SubscriptionSuccessPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SubscriptionSuccessContent />
+    </Suspense>
   );
 }

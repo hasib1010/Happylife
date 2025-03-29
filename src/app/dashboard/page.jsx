@@ -1,98 +1,210 @@
 'use client';
-// src/app/dashboard/page.js
 import { useState, useEffect, useCallback } from 'react';
-import { useSession } from 'next-auth/react';
+import { useAuth } from '@/components/auth/AuthProvider';
 import Link from 'next/link';
 import SubscriptionStatus from '@/components/subscription/SubscriptionStatus';
+import { fetchWithAuth } from '@/lib/authUtils';
+import toast from 'react-hot-toast';
 
 export default function Dashboard() {
-  const { data: session, status: sessionStatus, update: updateSession } = useSession();
+  const { user, loading: authLoading, isAuthenticated, hasRole } = useAuth();
   const [userData, setUserData] = useState(null);
-  const [isLoading, setIsLoading] = useState(true); // Renamed for clarity
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [stats, setStats] = useState({
-    listings: 0,
-    views: 0,
-    inquiries: 0,
-    
-  });
+  const [dashboardStats, setDashboardStats] = useState({});
+  const [subscriptionData, setSubscriptionData] = useState(null);
   const [hasFetched, setHasFetched] = useState(false);
+  
+  // Check if this is a new registration (from URL param)
+  const [isNewRegistration, setIsNewRegistration] = useState(false);
+  
+  useEffect(() => {
+    // Check URL or localStorage for new registration flag
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const newReg = urlParams.get('newRegistration') === 'true';
+      const storedNewReg = localStorage.getItem('newRegistration') === 'true';
+      
+      if (newReg || storedNewReg) {
+        setIsNewRegistration(true);
+        // Clean up
+        localStorage.removeItem('newRegistration');
+        // Remove from URL if present
+        if (newReg && window.history.replaceState) {
+          const newUrl = window.location.pathname;
+          window.history.replaceState({path: newUrl}, '', newUrl);
+        }
+      }
+    }
+  }, []);
 
-  // Fetch user data
-  const fetchUserData = useCallback(async () => {
-    if (hasFetched || !session?.user?.id) return;
+  // Fetch user data and related stats
+  const fetchDashboardData = useCallback(async () => {
+    if (hasFetched || !isAuthenticated) return;
 
     try {
       setIsLoading(true);
-      const response = await fetch('/api/user/dashboard');
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch user profile');
+      setError(null);
+      
+      // If this is a new registration, use the auth context user data first
+      // to show something immediately, even before API calls complete
+      if (isNewRegistration && user) {
+        setUserData({
+          ...user,
+          isSubscribed: user.isSubscribed || false
+        });
+        
+        // Set basic stats
+        setDashboardStats({
+          listings: 0,
+          views: 0,
+          inquiries: 0,
+          orders: 0,
+          messages: 0,
+          saved: 0,
+          viewed: 0,
+          reviews: 0,
+        });
       }
 
-      const data = await response.json();
-
-      if (data.success) {
-        setUserData(data.user);
-
-        // Set mock stats based on role
-        if (data.user.role === 'provider') {
-          setStats({
-            listings: Math.floor(Math.random() * 5),
-            views: Math.floor(Math.random() * 100),
-            inquiries: Math.floor(Math.random() * 10),
-            reviews: Math.floor(Math.random() * 5),
-          });
-        } else if (data.user.role === 'seller') {
-          setStats({
-            listings: Math.floor(Math.random() * 10),
-            views: Math.floor(Math.random() * 200),
-            orders: Math.floor(Math.random() * 10),
-            reviews: Math.floor(Math.random() * 8),
-          });
+      // Try fetching user profile data with error handling for new registrations
+      try {
+        const userResponse = await fetchWithAuth('/api/user/dashboard');
+        
+        if (userResponse.ok) {
+          const userProfileData = await userResponse.json();
+          
+          if (userProfileData.success) {
+            setUserData({
+              ...userProfileData.user,
+              // We'll update subscription status after fetching that data
+            });
+            
+            // Use stats from userData as fallback
+            setDashboardStats(userProfileData.stats || {
+              listings: 0,
+              views: 0,
+              inquiries: 0,
+              orders: 0,
+              messages: 0,
+              saved: 0,
+              viewed: 0,
+              reviews: 0,
+            });
+          }
         } else {
-          setStats({
-            saved: Math.floor(Math.random() * 8),
-            viewed: Math.floor(Math.random() * 25),
-            messages: Math.floor(Math.random() * 3),
-            reviews: Math.floor(Math.random() * 2),
+          // For new registrations, handle this gracefully without throwing
+          if (isNewRegistration) {
+            console.warn('User dashboard API returned non-OK status for new registration:', userResponse.status);
+          } else {
+            throw new Error('Failed to fetch user profile');
+          }
+        }
+      } catch (userError) {
+        // For new registrations, handle this gracefully
+        if (isNewRegistration) {
+          console.warn('Error fetching user profile for new registration:', userError);
+        } else {
+          throw userError; // Re-throw for normal dashboard loads
+        }
+      }
+
+      // Try fetching subscription status separately
+      try {
+        const subscriptionResponse = await fetchWithAuth('/api/subscription/status');
+        
+        if (subscriptionResponse.ok) {
+          const subData = await subscriptionResponse.json();
+          setSubscriptionData(subData);
+          
+          // Update user data with subscription status
+          setUserData(prevData => {
+            if (!prevData && user) {
+              // If we don't have userData yet but have auth user
+              return {
+                ...user,
+                isSubscribed: subData.isActive
+              };
+            } else if (prevData) {
+              // Update existing userData
+              return {
+                ...prevData,
+                isSubscribed: subData.isActive
+              };
+            }
+            return prevData;
           });
         }
-      } else {
-        throw new Error(data.message || 'Something went wrong');
+      } catch (subError) {
+        console.warn('Error fetching subscription status:', subError);
+        // Don't throw, continue with what we have
+      }
+      
+      // If we still don't have userData at this point, but we have user from auth context,
+      // use that as a fallback to avoid showing the error screen
+      if (!userData && user) {
+        setUserData({
+          ...user,
+          isSubscribed: subscriptionData?.isActive || false
+        });
+      }
+      
+      // If we have any user data at all, mark as fetched
+      if (userData || user) {
+        setHasFetched(true);
+      } else if (!isNewRegistration) {
+        // Only throw this error for non-new registrations
+        throw new Error('Unable to load user profile data');
       }
     } catch (err) {
-      console.error('Error fetching user data:', err);
-      setError(err.message);
+      console.error('Error fetching dashboard data:', err);
+      
+      // For new registrations, don't show error toast on first attempt
+      if (!isNewRegistration) {
+        setError(err.message);
+        toast.error(`Error loading dashboard: ${err.message}`);
+      } else {
+        // For new registrations, set a more helpful error message
+        setError('Your account is being set up. Please try refreshing in a moment.');
+      }
     } finally {
       setIsLoading(false);
       setHasFetched(true);
     }
-  }, [session?.user?.id, hasFetched]);
+  }, [isAuthenticated, hasFetched, user, userData, isNewRegistration, subscriptionData]);
 
-  // Effect to fetch user data when session is ready
+  // Effect to fetch user data when auth is ready
   useEffect(() => {
-    if (sessionStatus === 'loading') {
-      setIsLoading(true); // Keep loading while session is initializing
+    if (authLoading) {
+      setIsLoading(true);
       return;
     }
 
-    if (session?.user?.id && !hasFetched) {
-      fetchUserData();
-    } else if (!session) {
-      setIsLoading(false); // No session, stop loading
+    if (isAuthenticated && !hasFetched) {
+      // For new registrations, add a slight delay to allow auth to settle
+      if (isNewRegistration) {
+        const timer = setTimeout(() => {
+          fetchDashboardData();
+        }, 500);
+        return () => clearTimeout(timer);
+      } else {
+        fetchDashboardData();
+      }
+    } else if (!isAuthenticated) {
+      setIsLoading(false);
     }
-  }, [session, sessionStatus, fetchUserData, hasFetched]);
+  }, [isAuthenticated, authLoading, fetchDashboardData, hasFetched, isNewRegistration]);
 
-  // Manual refresh for debugging
+  // Manual refresh function
   const handleManualRefresh = async () => {
     setHasFetched(false);
-    setIsLoading(true);
-    await fetchUserData();
+    setIsNewRegistration(false); // Turn off special handling on manual refresh
+    await fetchDashboardData();
+    toast.success('Dashboard refreshed');
   };
 
-  // Loading state when session is still initializing or data is fetching
-  if (sessionStatus === 'loading' || isLoading) {
+  // Loading state
+  if (authLoading || (isLoading && !userData)) {
     return (
       <div className="p-6">
         <div className="max-w-7xl mx-auto">
@@ -106,8 +218,8 @@ export default function Dashboard() {
     );
   }
 
-  // No session (user not signed in)
-  if (!session) {
+  // Not signed in
+  if (!isAuthenticated) {
     return (
       <div className="p-6">
         <div className="max-w-7xl mx-auto text-center">
@@ -124,13 +236,16 @@ export default function Dashboard() {
     );
   }
 
-  // Error state when user data fails to load
-  if (!userData && !isLoading) {
+  // Get the best available user data
+  const effectiveUser = userData || user;
+  
+  // Error state - only if we have no user data at all
+  if (!effectiveUser) {
     return (
       <div className="p-6">
         <div className="max-w-7xl mx-auto text-center">
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">Unable to load your profile</h2>
-          <p className="text-gray-600 mb-6">We couldn't load your profile data. Please try again.</p>
+          <p className="text-gray-600 mb-6">{error || "We couldn't load your profile data. Please try again."}</p>
           <button
             onClick={handleManualRefresh}
             className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
@@ -142,18 +257,22 @@ export default function Dashboard() {
     );
   }
 
-  const isProvider = userData?.role === 'provider';
-  const isSeller = userData?.role === 'seller';
-  const isAdmin = userData?.role === 'admin';
+  // User role and status checks - using the effective user data
+  const isProvider = effectiveUser.role === 'provider' || hasRole('provider');
+  const isSeller = effectiveUser.role === 'seller' || hasRole('seller');
+  const isAdmin = effectiveUser.role === 'admin' || hasRole('admin');
   const isPremiumUser = isProvider || isSeller;
-  const isSubscribed = userData?.isSubscribed;
+  
+  // Get subscription status from the best available source
+  const isSubscribed = effectiveUser.isSubscribed || subscriptionData?.isActive;
 
   return (
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
+        {/* Header section */}
         <div className="md:flex md:items-center md:justify-between mb-6">
           <div className="flex-1 min-w-0">
-            <h1 className="text-2xl font-bold text-gray-900">Welcome, {userData?.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Welcome, {effectiveUser.name}</h1>
             <p className="mt-1 text-sm text-gray-500">
               {isProvider && 'Manage your service listings and connect with potential clients.'}
               {isSeller && 'Manage your product listings and track your orders.'}
@@ -161,7 +280,7 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="mt-4 flex md:mt-0 md:ml-4">
-            {isPremiumUser && (
+            {isPremiumUser && isSubscribed && (
               <Link
                 href={isProvider ? '/services/create' : '/products/create'}
                 className="ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -178,6 +297,26 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* New registration welcome message */}
+        {isNewRegistration && (
+          <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-green-700">
+                  Your account has been created successfully! Welcome to HappyLife.Services.
+                  {isPremiumUser && !isSubscribed && ' Complete your setup by subscribing below.'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Subscription notice for premium users without subscription */}
         {isPremiumUser && !isSubscribed && (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
             <div className="flex">
@@ -198,12 +337,14 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Subscription status for subscribed premium users */}
         {isPremiumUser && isSubscribed && (
           <div className="mb-6">
             <SubscriptionStatus />
           </div>
         )}
 
+        {/* Error display */}
         {error && (
           <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
             <div className="flex">
@@ -214,14 +355,19 @@ export default function Dashboard() {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-red-700">{error}</p>
+                {isNewRegistration && (
+                  <p className="text-xs text-red-600 mt-1">Your account is being set up. Try refreshing the page.</p>
+                )}
               </div>
             </div>
           </div>
         )}
 
+        {/* Stats overview section */}
         <div className="mb-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Overview</h2>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {/* First stat card */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
                 <div className="flex items-center">
@@ -237,7 +383,7 @@ export default function Dashboard() {
                       </dt>
                       <dd>
                         <div className="text-lg font-medium text-gray-900">
-                          {isProvider || isSeller ? stats.listings : stats.saved}
+                          {isProvider || isSeller ? dashboardStats.listings || 0 : dashboardStats.saved || 0}
                         </div>
                       </dd>
                     </dl>
@@ -247,7 +393,7 @@ export default function Dashboard() {
               <div className="bg-gray-50 px-5 py-3">
                 <div className="text-sm">
                   <Link
-                    href={isProvider ? '/services/manage' : isSeller ? '/products/manage' : '/favorites'}
+                    href={isProvider ? '/dashboard/services/' : isSeller ? '/dashboard/products/' : '/favorites'}
                     className="font-medium text-blue-600 hover:text-blue-500"
                   >
                     View all
@@ -256,102 +402,19 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 bg-indigo-500 rounded-md p-3">
-                    <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Profile Views</dt>
-                      <dd>
-                        <div className="text-lg font-medium text-gray-900">
-                          {isPremiumUser ? stats.views : stats.viewed}
-                        </div>
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">
-                  <Link href="/analytics" className="font-medium text-blue-600 hover:text-blue-500">
-                    View analytics
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 bg-green-500 rounded-md p-3">
-                    <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                    </svg>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        {isProvider ? 'Inquiries' : isSeller ? 'Orders' : 'Messages'}
-                      </dt>
-                      <dd>
-                        <div className="text-lg font-medium text-gray-900">
-                          {isProvider ? stats.inquiries : isSeller ? stats.orders : stats.messages || 0}
-                        </div>
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">
-                  <Link href="/messages" className="font-medium text-blue-600 hover:text-blue-500">
-                    View all
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0 bg-yellow-500 rounded-md p-3">
-                    <svg className="h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                    </svg>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Reviews</dt>
-                      <dd>
-                        <div className="text-lg font-medium text-gray-900">{stats.reviews || 0}</div>
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">
-                  <Link href="/reviews" className="font-medium text-blue-600 hover:text-blue-500">
-                    View all
-                  </Link>
-                </div>
-              </div>
-            </div>
+           {/* Additional stat cards would go here */}
+           
           </div>
         </div>
 
+        {/* Quick actions section */}
         <div>
           <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {/* Provider/Seller specific actions */}
             {isPremiumUser && (
               <>
-                <Link href="/profile/edit" className="block hover:bg-gray-50 bg-white shadow rounded-lg overflow-hidden">
+                <Link href="/profile" className="block hover:bg-gray-50 bg-white shadow rounded-lg overflow-hidden">
                   <div className="px-4 py-5 sm:p-6">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
@@ -367,7 +430,7 @@ export default function Dashboard() {
                   </div>
                 </Link>
 
-                <Link href={isProvider ? '/services/manage' : '/products/manage'} className="block hover:bg-gray-50 bg-white shadow rounded-lg overflow-hidden">
+                <Link href={isProvider ? '/dashboard/services' : '/dashboard/products'} className="block hover:bg-gray-50 bg-white shadow rounded-lg overflow-hidden">
                   <div className="px-4 py-5 sm:p-6">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
@@ -403,6 +466,7 @@ export default function Dashboard() {
               </>
             )}
 
+            {/* Regular user specific actions */}
             {!isPremiumUser && (
               <>
                 <Link href="/services" className="block hover:bg-gray-50 bg-white shadow rounded-lg overflow-hidden">
@@ -437,7 +501,7 @@ export default function Dashboard() {
                   </div>
                 </Link>
 
-                <Link href="/profile/edit" className="block hover:bg-gray-50 bg-white shadow rounded-lg overflow-hidden">
+                <Link href="/profile" className="block hover:bg-gray-50 bg-white shadow rounded-lg overflow-hidden">
                   <div className="px-4 py-5 sm:p-6">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
@@ -457,6 +521,7 @@ export default function Dashboard() {
           </div>
         </div>
 
+        {/* Upgrade account banner for regular users */}
         {!isPremiumUser && (
           <div className="mt-8 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-lg shadow-lg">
             <div className="px-6 py-10 sm:px-10">

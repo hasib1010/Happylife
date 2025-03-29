@@ -1,31 +1,73 @@
 'use client';
 // src/components/subscription/SubscriptionStatus.jsx
-import { useSubscription } from '@/contexts/SubscriptionContext';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 export default function SubscriptionStatus() {
-  const { 
-    isLoading, 
-    isActive, 
-    isSubscribed, 
-    subscriptionStatus, 
-    subscription, 
-    refreshSubscription 
-  } = useSubscription();
+  const [loading, setLoading] = useState(true);
+  const [subscriptionData, setSubscriptionData] = useState(null);
+  const [error, setError] = useState(null);
 
-  if (isLoading) {
+  useEffect(() => {
+    const fetchSubscriptionStatus = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/subscription/status');
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch subscription status');
+        }
+        
+        const data = await response.json();
+        setSubscriptionData(data);
+      } catch (err) {
+        console.error('Error fetching subscription status:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSubscriptionStatus();
+  }, []);
+
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow p-4 animate-pulse">
-        <div className="h-6 bg-gray-200 rounded w-3/4 mb-3"></div>
-        <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+      <div className="bg-white shadow rounded-lg p-4 animate-pulse">
+        <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
+        <div className="h-3 bg-gray-200 rounded w-1/2 mb-4"></div>
+        <div className="h-3 bg-gray-200 rounded w-1/3"></div>
       </div>
     );
   }
 
-  // Not subscribed
-  if (!isSubscribed) {
+  if (error) {
     return (
-      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg shadow">
+      <div className="bg-red-50 border-l-4 border-red-400 p-4">
+        <div className="flex">
+          <div className="flex-shrink-0">
+            <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="ml-3">
+            <p className="text-sm text-red-700">Error loading subscription data: {error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If no subscription or not active
+  if (!subscriptionData || !subscriptionData.isActive) {
+    return (
+      <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
         <div className="flex">
           <div className="flex-shrink-0">
             <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -33,89 +75,48 @@ export default function SubscriptionStatus() {
             </svg>
           </div>
           <div className="ml-3">
-            <h3 className="text-sm font-medium text-yellow-800">Subscription Required</h3>
-            <div className="mt-2 text-sm text-yellow-700">
-              <p>You need an active subscription to access premium features.</p>
-              <div className="mt-4">
-                <Link
-                  href="/subscription"
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-yellow-700 bg-yellow-100 hover:bg-yellow-200"
-                >
-                  View Plans
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Subscription exists but is not active
-  if (isSubscribed && !isActive) {
-    const status = subscriptionStatus || 'inactive';
-    
-    return (
-      <div className="bg-orange-50 border-l-4 border-orange-400 p-4 rounded-lg shadow">
-        <div className="flex">
-          <div className="flex-shrink-0">
-            <svg className="h-5 w-5 text-orange-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <div className="ml-3">
-            <h3 className="text-sm font-medium text-orange-800">Subscription Issue</h3>
-            <div className="mt-2 text-sm text-orange-700">
-              <p>Your subscription status is: <span className="font-medium capitalize">{status}</span></p>
-              <div className="mt-4">
-                <Link
-                  href="/subscription/manage"
-                  className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-orange-700 bg-orange-100 hover:bg-orange-200"
-                >
-                  Manage Subscription
-                </Link>
-                <button
-                  onClick={refreshSubscription}
-                  className="ml-3 inline-flex items-center px-4 py-2 border border-transparent rounded-md text-sm font-medium text-orange-700 hover:bg-orange-100"
-                >
-                  Refresh Status
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Active subscription
-  return (
-    <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-lg shadow">
-      <div className="flex">
-        <div className="flex-shrink-0">
-          <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-          </svg>
-        </div>
-        <div className="ml-3">
-          <h3 className="text-sm font-medium text-green-800">Subscription Active</h3>
-          <div className="mt-2 text-sm text-green-700">
-            <p>
-              Your subscription is active
-              {subscription?.currentPeriodEnd && (
-                <> until {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</>
-              )}
-              .
-            </p>
-            <div className="mt-4">
-              <Link
-                href="/subscription/manage"
-                className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-green-700 bg-green-100 hover:bg-green-200"
-              >
-                Manage Subscription
+            <p className="text-sm text-yellow-700">
+              Your subscription is not active. 
+              <Link href="/subscription" className="font-medium underline text-yellow-700 hover:text-yellow-600 ml-1">
+                Subscribe now
               </Link>
-            </div>
+            </p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  const { subscription, user } = subscriptionData;
+  const isPremiumUser = user?.role === 'provider' || user?.role === 'seller';
+  const isProvider = user?.role === 'provider';
+  const isSeller = user?.role === 'seller';
+
+  return (
+    <div className="bg-white shadow rounded-lg p-4">
+      <div className="flex justify-between items-start">
+        <div>
+          <h3 className="text-lg font-medium text-gray-900">Subscription Status</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            {isProvider ? 'Provider' : 'Seller'} Monthly Subscription
+          </p>
+        </div>
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+          Active
+        </span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <span className="block text-gray-500">Next billing date</span>
+          <span className="block font-medium">{formatDate(user?.subscriptionEnd)}</span>
+        </div>
+        <div className="text-right">
+          <Link
+            href="/subscription/manage"
+            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+          >
+            Manage Subscription
+          </Link>
         </div>
       </div>
     </div>

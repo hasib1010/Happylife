@@ -43,8 +43,8 @@ export async function POST(request) {
     // Upload to S3
     await s3Client.send(new PutObjectCommand(params));
 
-    // Generate the URL for the uploaded file
-    const fileUrl = `https://${process.env.AWS_S3_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+    // Generate the correct URL format for the uploaded file
+    const fileUrl = `https://s3.${process.env.AWS_REGION}.amazonaws.com/${process.env.AWS_S3_BUCKET_NAME}/${fileName}`;
 
     return NextResponse.json({ 
       success: true, 

@@ -1,37 +1,53 @@
+// src/app/api/auth/login/route.js
 import { NextResponse } from 'next/server';
-import { connectDB } from '@/lib/database';
+import dbConnect from '@/lib/db';
 import User from '@/models/user';
 import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs'; // Import bcrypt for direct comparison
 
 export async function POST(request) {
   try {
     const { email, password } = await request.json();
+    console.log('Login attempt with email:', email);
 
     if (!email || !password) {
+      console.log('Missing email or password');
       return NextResponse.json(
-        { message: 'Email and password are required' },
+        { success: false, message: 'Email and password are required' },
         { status: 400 }
       );
     }
 
-    await connectDB();
+    await dbConnect();
 
-    // Find user by email
+    // Find user by email, explicitly including password
     const user = await User.findOne({ email }).select('+password');
-
+    console.log('User found:', !!user);
+    
     if (!user || !user.isActive) {
+      console.log('User not found or not active');
       return NextResponse.json(
-        { message: 'Invalid credentials' },
+        { success: false, message: 'Invalid credentials' },
         { status: 401 }
       );
     }
 
-    // Verify password
-    const isPasswordValid = await user.comparePassword(password);
+    console.log('User password hash:', user.password ? user.password.substring(0, 20) + '...' : 'undefined');
 
-    if (!isPasswordValid) {
+    // Try direct bcrypt comparison first for debugging
+    console.log('Attempting direct bcrypt comparison...');
+    const directCompareResult = await bcrypt.compare(password, user.password);
+    console.log('Direct bcrypt comparison result:', directCompareResult);
+
+    // Verify password using the model method
+    console.log('Attempting password verification with model method...');
+    const isPasswordValid = await user.comparePassword(password);
+    console.log('Model password verification result:', isPasswordValid);
+
+    if (!directCompareResult) {
+      console.log('Password verification failed');
       return NextResponse.json(
-        { message: 'Invalid credentials' },
+        { success: false, message: 'Invalid credentials' },
         { status: 401 }
       );
     }
@@ -41,7 +57,7 @@ export async function POST(request) {
     if (!jwtSecret) {
       console.error('JWT_SECRET is not defined in environment variables');
       return NextResponse.json(
-        { message: 'Server configuration error' },
+        { success: false, message: 'Server configuration error' },
         { status: 500 }
       );
     }
@@ -69,7 +85,9 @@ export async function POST(request) {
       subscriptionStatus: user.subscriptionStatus,
     };
 
+    console.log('Login successful for user:', user.email);
     return NextResponse.json({
+      success: true,
       message: 'Login successful',
       token,
       user: userWithoutPassword,
@@ -77,7 +95,7 @@ export async function POST(request) {
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { message: 'Internal server error' },
+      { success: false, message: 'Internal server error', error: error.message },
       { status: 500 }
     );
   }

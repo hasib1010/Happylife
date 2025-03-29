@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import SignupSuccess from '@/components/auth/SignupSuccess';
+import { Loader2 } from 'lucide-react';
 
-export default function SignupSuccessPage() {
+// Component that uses searchParams
+function SignupSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [userData, setUserData] = useState(null);
@@ -42,5 +44,26 @@ export default function SignupSuccessPage() {
         <SignupSuccess user={userData} />
       </div>
     </div>
+  );
+}
+
+// Loading fallback
+function SignupSuccessLoading() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-teal-50 to-blue-50 flex items-center justify-center">
+      <div className="flex flex-col items-center p-8">
+        <Loader2 className="h-12 w-12 animate-spin text-teal-600 mb-4" />
+        <p className="text-gray-600">Loading...</p>
+      </div>
+    </div>
+  );
+}
+
+// Main component with Suspense boundary
+export default function SignupSuccessPage() {
+  return (
+    <Suspense fallback={<SignupSuccessLoading />}>
+      <SignupSuccessContent />
+    </Suspense>
   );
 }

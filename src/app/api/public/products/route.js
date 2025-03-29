@@ -18,6 +18,7 @@ export async function GET(request) {
       const sort = url.searchParams.get('sort') || 'createdAt';
       const order = url.searchParams.get('order') || 'desc';
       const skip = (page - 1) * limit;
+      const featuredOnly = url.searchParams.get('featured') === 'true';
       
       // Build query object for filtering
       let queryObject = {
@@ -39,6 +40,23 @@ export async function GET(request) {
       if (query) {
         queryObject.$text = { $search: query };
       }
+
+      // Important: Add the current date for comparing feature expiration
+      const currentDate = new Date();
+      
+      // If featuredOnly flag is set, only show currently featured products
+      if (featuredOnly) {
+        queryObject.isFeatured = true;
+        
+        // Show products that are featured, and either:
+        // 1. Have no featureExpiration field, or
+        // 2. Have a featureExpiration date in the future
+        queryObject.$or = [
+          { featureExpiration: { $exists: false } },
+          { featureExpiration: null },
+          { featureExpiration: { $gt: currentDate } }
+        ];
+      }
       
       // Get total count for pagination
       const total = await Product.countDocuments(queryObject);
@@ -55,9 +73,6 @@ export async function GET(request) {
         sortQuery[sort] = order === 'asc' ? 1 : -1;
       }
       
-      // Important: Add the current date for comparing feature expiration
-      const currentDate = new Date();
-      
       // Build the aggregation pipeline
       const pipeline = [
         { $match: queryObject },
@@ -69,11 +84,34 @@ export async function GET(request) {
                 { 
                   $and: [
                     { $eq: ["$isFeatured", true] },
-                    { $gt: ["$featureExpiration", currentDate] }
+                    {
+                      $or: [
+                        { $eq: [{ $ifNull: ["$featureExpiration", null] }, null] },
+                        { $gt: ["$featureExpiration", currentDate] }
+                      ]
+                    }
                   ]
                 },
                 1,
                 0
+              ]
+            },
+            // Add a computed field for active featured status that handles missing expiration
+            isActiveFeatured: {
+              $cond: [
+                { 
+                  $and: [
+                    { $eq: ["$isFeatured", true] },
+                    {
+                      $or: [
+                        { $eq: [{ $ifNull: ["$featureExpiration", null] }, null] },
+                        { $gt: ["$featureExpiration", currentDate] }
+                      ]
+                    }
+                  ]
+                },
+                true,
+                false
               ]
             }
           }
@@ -114,7 +152,8 @@ export async function GET(request) {
             status: 1,
             isActive: 1,
             isFeatured: 1,
-            featureExpiration: 1, // Include this to check featured status on client
+            isActiveFeatured: 1, // Include this computed field
+            featureExpiration: 1,
             tags: 1,
             viewCount: 1,
             createdAt: 1,
@@ -143,7 +182,8 @@ export async function GET(request) {
         images: product.images || [],
         features: product.features || [],
         isFeatured: product.isFeatured || false,
-        featureExpiration: product.featureExpiration, // Pass this to client
+        isActiveFeatured: product.isActiveFeatured || false, // Include the computed featured status
+        featureExpiration: product.featureExpiration,
         tags: product.tags || [],
         viewCount: product.viewCount || 0,
         seller: product.seller ? {
@@ -159,11 +199,24 @@ export async function GET(request) {
       // Get categories for filters
       const categories = await Product.distinct('category', { status: 'published', isActive: true });
       
+      // Get total featured count - include products with no expiration date
+      const featuredCount = await Product.countDocuments({
+        status: 'published', 
+        isActive: true,
+        isFeatured: true,
+        $or: [
+          { featureExpiration: { $exists: false } },
+          { featureExpiration: null },
+          { featureExpiration: { $gt: currentDate } }
+        ]
+      });
+      
       // Return the products with pagination info
       return NextResponse.json({
         success: true,
         products: formattedProducts,
         categories,
+        featuredCount,
         pagination: {
           totalItems: total,
           totalPages: Math.ceil(total / limit),
