@@ -11,7 +11,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
   title: 'HappyLife.Services - Health & Wellness Directory',
-  description: 'Find trusted health and wellness providers and products for your holistic well-being journey.',
+  description: 'Find trusted health and wellness providers and products and blogs for your holistic well-being journey .',
 };
 
 export default function RootLayout({ children }) {
